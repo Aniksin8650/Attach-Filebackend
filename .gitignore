@@ -1,0 +1,21 @@
+# STS / Eclipse metadata
+.metadata/
+*.classpath
+*.project
+*.settings/
+
+# Build output
+target/
+bin/
+
+# Logs and temp files
+*.log
+*.tmp
+
+# OS-specific stuff
+.DS_Store
+Thumbs.db
+
+# IDE configs
+.vscode/
+.idea/
