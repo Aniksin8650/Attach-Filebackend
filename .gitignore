@@ -1,24 +1,26 @@
-# STS / Eclipse metadata
-.metadata/
-*.classpath
-*.project
-*.settings/
-
-# Build output
+# Maven
 target/
-bin/
 
-# Logs and temp files
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# Logs
 *.log
-*.tmp
+logs/
 
-# OS-specific stuff
+# OS files
 .DS_Store
 Thumbs.db
 
-# IDE configs
-.vscode/
-.idea/
+# Uploads or temp files
+uploads/
 
-# Docs
-*.docx
+# Node frontend (if any)
+node_modules/
+dist/
+build/
+
+# Environment variables
+.env
