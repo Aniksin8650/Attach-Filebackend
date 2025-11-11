@@ -6,33 +6,30 @@ import jakarta.persistence.*;
 @Table(name = "leave_applications")
 public class LeaveApplication {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    // ✅ Composite key: empId + startDate + endDate
+    @EmbeddedId
+    private LeaveApplicationId id;
 
     // Unique token to track/edit applications (e.g., APP-12345678)
     @Column(unique = true)
     private String token;
 
-    private String empId;
     private String name;
     private String department;
     private String designation;
     private String reason;
-    private String startDate;   // You can change to LocalDate if needed
-    private String endDate;     // Same as above
     private String contact;
-    private String fileName;    // Semicolon-separated list of uploaded files
-    private String applicationType; // e.g., "leave", "tada", "ltc"
+    private String fileName;          // Semicolon-separated list of uploaded files
+    private String applicationType;   // e.g., "leave", "tada", "ltc"
 
     // Default constructor
     public LeaveApplication() {}
 
-    // Getters and Setters
-    public Long getId() {
+    // ✅ Getters and Setters
+    public LeaveApplicationId getId() {
         return id;
     }
-    public void setId(Long id) {
+    public void setId(LeaveApplicationId id) {
         this.id = id;
     }
 
@@ -41,13 +38,6 @@ public class LeaveApplication {
     }
     public void setToken(String token) {
         this.token = token;
-    }
-
-    public String getEmpId() {
-        return empId;
-    }
-    public void setEmpId(String empId) {
-        this.empId = empId;
     }
 
     public String getName() {
@@ -78,20 +68,6 @@ public class LeaveApplication {
         this.reason = reason;
     }
 
-    public String getStartDate() {
-        return startDate;
-    }
-    public void setStartDate(String startDate) {
-        this.startDate = startDate;
-    }
-
-    public String getEndDate() {
-        return endDate;
-    }
-    public void setEndDate(String endDate) {
-        this.endDate = endDate;
-    }
-
     public String getContact() {
         return contact;
     }
@@ -111,5 +87,30 @@ public class LeaveApplication {
     }
     public void setApplicationType(String applicationType) {
         this.applicationType = applicationType;
+    }
+
+    // ✅ Convenience getters and setters for embedded ID fields
+    public String getEmpId() {
+        return id != null ? id.getEmpId() : null;
+    }
+    public void setEmpId(String empId) {
+        if (id == null) id = new LeaveApplicationId();
+        id.setEmpId(empId);
+    }
+
+    public String getStartDate() {
+        return id != null ? id.getStartDate() : null;
+    }
+    public void setStartDate(String startDate) {
+        if (id == null) id = new LeaveApplicationId();
+        id.setStartDate(startDate);
+    }
+
+    public String getEndDate() {
+        return id != null ? id.getEndDate() : null;
+    }
+    public void setEndDate(String endDate) {
+        if (id == null) id = new LeaveApplicationId();
+        id.setEndDate(endDate);
     }
 }
