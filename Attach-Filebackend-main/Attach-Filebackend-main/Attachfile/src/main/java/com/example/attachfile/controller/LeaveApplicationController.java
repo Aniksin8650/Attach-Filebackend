@@ -27,6 +27,12 @@ public class LeaveApplicationController {
         this.repository = repository;
     }
 
+    // ✅ New end point to fetch all leave applications
+    @GetMapping("/all")
+    public List<LeaveApplication> getAllLeaves() {
+        return repository.findAll();
+    }
+    
     // ==================== SUBMIT NEW APPLICATION ====================
     @PostMapping("/submit")
     public ResponseEntity<?> submitLeaveApplication(
