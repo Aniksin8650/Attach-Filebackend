@@ -16,4 +16,8 @@ public interface TAApplicationService {
     TAApplication submit(TADTO dto) throws IOException;
 
     TAApplication update(String token, TADTO dto) throws IOException;
+    
+    List<TAApplication> getByStatus(String status);
+    TAApplication updateStatus(String applnNo, String status);
+
 }

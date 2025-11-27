@@ -41,6 +41,10 @@ public class DAApplication {
 
     @Column(length = 2000)
     private String fileName;
+    
+    @Column(name = "STATUS", length = 20)
+    private String status = "PENDING";
+
 
     public void updateFromDTO(DADTO dto, String finalFileNames) {
         this.empId = dto.getEmpId();

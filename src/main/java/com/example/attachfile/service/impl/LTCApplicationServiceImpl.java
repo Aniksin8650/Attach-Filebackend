@@ -3,13 +3,14 @@ package com.example.attachfile.service.impl;
 import com.example.attachfile.dto.LTCDTO;
 import com.example.attachfile.entity.LTCApplication;
 import com.example.attachfile.repository.LTCApplicationRepository;
+import com.example.attachfile.service.FileStorageService;
+import com.example.attachfile.service.LTCApplicationService;
 import org.springframework.stereotype.Service;
-import com.example.attachfile.service.*;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
-    import java.util.Optional;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -30,35 +31,60 @@ public class LTCApplicationServiceImpl implements LTCApplicationService {
     }
 
     @Override
-    public Optional<LTCApplication> getByApplnNo(String ApplnNo) {
-        return repository.findByApplnNo(ApplnNo);
+    public Optional<LTCApplication> getByApplnNo(String applnNo) {
+        return repository.findByApplnNo(applnNo);
     }
 
     @Override
     public LTCApplication submit(LTCDTO dto) throws IOException {
+
         File empDir = fileStorageService.getEmpDirectory(dto.getApplicationType(), dto.getEmpId());
+
         var newFiles = fileStorageService.saveNewFiles(dto.getFiles(), empDir);
         String finalFileNames = String.join(";", newFiles);
 
         LTCApplication entity = new LTCApplication();
         entity.updateFromDTO(dto, finalFileNames);
+
+        entity.setStatus("PENDING");
+
         return repository.save(entity);
     }
 
     @Override
-    public LTCApplication update(String ApplnNo, LTCDTO dto) throws IOException {
-        LTCApplication existing = repository.findByApplnNo(ApplnNo)
-                .orElseThrow(() -> new RuntimeException("No LTC application found with token: " + ApplnNo));
+    public LTCApplication update(String applnNo, LTCDTO dto) throws IOException {
+
+        LTCApplication existing = repository.findByApplnNo(applnNo)
+                .orElseThrow(() -> new RuntimeException("No LTC application found with token: " + applnNo));
 
         File empDir = fileStorageService.getEmpDirectory(dto.getApplicationType(), dto.getEmpId());
 
         Set<String> retained = fileStorageService.parseRetainedFiles(dto.getRetainedFiles());
+
         var newFiles = fileStorageService.saveNewFiles(dto.getFiles(), empDir);
+
         fileStorageService.deleteRemovedFiles(retained, empDir);
 
         String finalFileNames = fileStorageService.mergeFileNames(retained, newFiles);
 
         existing.updateFromDTO(dto, finalFileNames);
+
+        // Optional: existing.setStatus("PENDING");
+
+        return repository.save(existing);
+    }
+
+    @Override
+    public List<LTCApplication> getByStatus(String status) {
+        return repository.findByStatus(status);
+    }
+
+    @Override
+    public LTCApplication updateStatus(String applnNo, String status) {
+        LTCApplication existing = repository.findByApplnNo(applnNo)
+                .orElseThrow(() -> new RuntimeException("No LTC application found with token: " + applnNo));
+
+        existing.setStatus(status.toUpperCase());
         return repository.save(existing);
     }
 }

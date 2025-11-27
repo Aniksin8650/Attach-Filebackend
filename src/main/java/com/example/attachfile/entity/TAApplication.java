@@ -46,6 +46,9 @@ public class TAApplication {
     @Column(length = 2000)
     private String fileName;  // semicolon-separated file names
 
+    @Column(name = "STATUS", length = 20)
+    private String status = "PENDING";
+
     // ============================================
     // Helper: fill entity fields from DTO
     // ============================================

@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/ltc")
@@ -23,6 +24,18 @@ public class LTCApplicationController {
     @GetMapping("/all")
     public List<LTCApplication> getAllLtc() {
         return ltcService.getAll();
+    }
+
+    @GetMapping("/pending")
+    public ResponseEntity<List<LTCApplication>> getPendingLtc() {
+        List<LTCApplication> pending = ltcService.getByStatus("PENDING");
+        return ResponseEntity.ok(pending);
+    }
+
+    @GetMapping("/status/{status}")
+    public ResponseEntity<List<LTCApplication>> getLtcByStatus(@PathVariable String status) {
+        List<LTCApplication> list = ltcService.getByStatus(status.toUpperCase());
+        return ResponseEntity.ok(list);
     }
 
     @PostMapping("/submit")
@@ -42,7 +55,7 @@ public class LTCApplicationController {
     }
 
     @GetMapping("/ApplnNo/{ApplnNo}")
-    public ResponseEntity<?> getByToken(@PathVariable String ApplnNo) {
+    public ResponseEntity<?> getLtcByApplnNo(@PathVariable String ApplnNo) {
         return ltcService.getByApplnNo(ApplnNo)
                 .<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -65,6 +78,29 @@ public class LTCApplicationController {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Update failed: " + e.getMessage());
+        }
+    }
+
+    @PutMapping("/status/{ApplnNo}")
+    public ResponseEntity<?> updateLtcStatus(
+            @PathVariable String ApplnNo,
+            @RequestBody Map<String, String> body
+    ) {
+        String statusStr = body.get("status");
+        if (statusStr == null || statusStr.isBlank()) {
+            return ResponseEntity.badRequest().body("Missing 'status' in request body");
+        }
+
+        String normalizedStatus = statusStr.toUpperCase();
+        try {
+            LTCApplication updated = ltcService.updateStatus(ApplnNo, normalizedStatus);
+            return ResponseEntity.ok("LTC status updated to " + updated.getStatus());
+        } catch (RuntimeException ex) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Status update failed: " + ex.getMessage());
         }
     }
 }

@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/ta")
@@ -20,13 +21,37 @@ public class TAApplicationController {
         this.taService = taService;
     }
 
+    // ===============================
     // Get all TA applications
+    // ===============================
     @GetMapping("/all")
     public List<TAApplication> getAllTa() {
         return taService.getAll();
     }
 
+    // ===============================
+    // 🆕 Get all PENDING TA applications (for Admin Requests)
+    // /api/ta/pending
+    // ===============================
+    @GetMapping("/pending")
+    public ResponseEntity<List<TAApplication>> getPendingTa() {
+        List<TAApplication> pending = taService.getByStatus("PENDING");
+        return ResponseEntity.ok(pending);
+    }
+
+    // ===============================
+    // 🆕 Get TA applications by status
+    // /api/ta/status/PENDING, /APPROVED, /REJECTED
+    // ===============================
+    @GetMapping("/status/{status}")
+    public ResponseEntity<List<TAApplication>> getTaByStatus(@PathVariable String status) {
+        List<TAApplication> list = taService.getByStatus(status.toUpperCase());
+        return ResponseEntity.ok(list);
+    }
+
+    // ===============================
     // Submit new TA
+    // ===============================
     @PostMapping("/submit")
     public ResponseEntity<?> submitTa(@ModelAttribute TADTO dto) {
         try {
@@ -43,7 +68,9 @@ public class TAApplicationController {
         }
     }
 
+    // ===============================
     // Get by token
+    // ===============================
     @GetMapping("/ApplnNo/{ApplnNo}")
     public ResponseEntity<?> getByApplnNo(@PathVariable String ApplnNo) {
         return taService.getByApplnNo(ApplnNo)
@@ -52,7 +79,9 @@ public class TAApplicationController {
                         .body("No TA application found for token: " + ApplnNo));
     }
 
+    // ===============================
     // Update existing TA
+    // ===============================
     @PutMapping("/update/{ApplnNo}")
     public ResponseEntity<?> updateTa(
             @PathVariable String ApplnNo,
@@ -69,6 +98,34 @@ public class TAApplicationController {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Update failed: " + e.getMessage());
+        }
+    }
+
+    // ===============================
+    // 🆕 Update status (Admin Approve / Reject / On Hold)
+    // PUT /api/ta/status/{ApplnNo}
+    // body: { "status": "APPROVED" }
+    // ===============================
+    @PutMapping("/status/{ApplnNo}")
+    public ResponseEntity<?> updateTaStatus(
+            @PathVariable String ApplnNo,
+            @RequestBody Map<String, String> body
+    ) {
+        String statusStr = body.get("status");
+        if (statusStr == null || statusStr.isBlank()) {
+            return ResponseEntity.badRequest().body("Missing 'status' in request body");
+        }
+
+        String normalizedStatus = statusStr.toUpperCase();
+        try {
+            TAApplication updated = taService.updateStatus(ApplnNo, normalizedStatus);
+            return ResponseEntity.ok("TA status updated to " + updated.getStatus());
+        } catch (RuntimeException ex) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Status update failed: " + ex.getMessage());
         }
     }
 }
