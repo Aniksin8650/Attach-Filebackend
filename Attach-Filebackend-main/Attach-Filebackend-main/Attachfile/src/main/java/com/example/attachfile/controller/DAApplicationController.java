@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/da")
@@ -20,11 +21,27 @@ public class DAApplicationController {
         this.daService = daService;
     }
 
+    // Get all DA applications
     @GetMapping("/all")
     public List<DAApplication> getAllDa() {
         return daService.getAll();
     }
 
+    // 🆕 Get all PENDING DA applications
+    @GetMapping("/pending")
+    public ResponseEntity<List<DAApplication>> getPendingDa() {
+        List<DAApplication> pending = daService.getByStatus("PENDING");
+        return ResponseEntity.ok(pending);
+    }
+
+    // 🆕 Get DA applications by status
+    @GetMapping("/status/{status}")
+    public ResponseEntity<List<DAApplication>> getDaByStatus(@PathVariable String status) {
+        List<DAApplication> list = daService.getByStatus(status.toUpperCase());
+        return ResponseEntity.ok(list);
+    }
+
+    // Submit new DA
     @PostMapping("/submit")
     public ResponseEntity<?> submitDa(@ModelAttribute DADTO dto) {
         try {
@@ -41,14 +58,16 @@ public class DAApplicationController {
         }
     }
 
+    // Get by token
     @GetMapping("/ApplnNo/{ApplnNo}")
-    public ResponseEntity<?> getByApplnNo(@PathVariable String ApplnNo) {
+    public ResponseEntity<?> getDaByApplnNo(@PathVariable String ApplnNo) {
         return daService.getByApplnNo(ApplnNo)
                 .<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body("No DA application found for token: " + ApplnNo));
     }
 
+    // Update existing DA
     @PutMapping("/update/{ApplnNo}")
     public ResponseEntity<?> updateDa(
             @PathVariable String ApplnNo,
@@ -65,6 +84,30 @@ public class DAApplicationController {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Update failed: " + e.getMessage());
+        }
+    }
+
+    // 🆕 Update status (Admin)
+    @PutMapping("/status/{ApplnNo}")
+    public ResponseEntity<?> updateDaStatus(
+            @PathVariable String ApplnNo,
+            @RequestBody Map<String, String> body
+    ) {
+        String statusStr = body.get("status");
+        if (statusStr == null || statusStr.isBlank()) {
+            return ResponseEntity.badRequest().body("Missing 'status' in request body");
+        }
+
+        String normalizedStatus = statusStr.toUpperCase();
+        try {
+            DAApplication updated = daService.updateStatus(ApplnNo, normalizedStatus);
+            return ResponseEntity.ok("DA status updated to " + updated.getStatus());
+        } catch (RuntimeException ex) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Status update failed: " + ex.getMessage());
         }
     }
 }

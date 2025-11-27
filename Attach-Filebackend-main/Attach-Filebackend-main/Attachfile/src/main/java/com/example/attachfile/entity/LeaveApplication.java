@@ -37,6 +37,10 @@ public class LeaveApplication {
     @Column(length = 2000)
     private String fileName;  // semicolon-separated saved file names
 
+    // 🆕 STATUS column (PENDING / APPROVED / REJECTED / ON_HOLD ...)
+    @Column(name = "STATUS", length = 20)
+    private String status = "PENDING";
+
     // ============================================
     // Update entity fields from DTO
     // ============================================
@@ -62,5 +66,9 @@ public class LeaveApplication {
         this.applnNo = dto.getApplnNo();
 
         this.fileName = finalFileNames; // merged file names
+
+        // ⚠️ IMPORTANT:
+        // We are NOT touching "status" here,
+        // so admin decisions won't be overwritten when user edits.
     }
 }

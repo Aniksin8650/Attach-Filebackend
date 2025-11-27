@@ -76,4 +76,19 @@ public class TAApplicationServiceImpl implements TAApplicationService {
 
         return repository.save(existing);
     }
+    // 🆕 Get applications by status (PENDING / APPROVED / REJECTED / ON_HOLD...)
+    @Override
+    public List<TAApplication> getByStatus(String status) {
+        return repository.findByStatus(status);
+    }
+
+    // 🆕 Update status for a given applnNo (used by admin controller)
+    @Override
+    public TAApplication updateStatus(String applnNo, String status) {
+        TAApplication existing = repository.findByApplnNo(applnNo)
+                .orElseThrow(() -> new RuntimeException("No TA application found with token: " + applnNo));
+
+        existing.setStatus(status.toUpperCase());
+        return repository.save(existing);
+    }
 }

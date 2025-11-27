@@ -6,12 +6,9 @@ import com.example.attachfile.repository.LeaveApplicationRepository;
 import com.example.attachfile.service.FileStorageService;
 import com.example.attachfile.util.DateUtil;
 
-//import jakarta.persistence.Table;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-//import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
@@ -42,6 +39,26 @@ public class LeaveApplicationController {
     }
 
     // ============================
+    // 🆕 GET ALL PENDING LEAVES (ADMIN)
+    // /api/leave/pending
+    // ============================
+    @GetMapping("/pending")
+    public ResponseEntity<List<LeaveApplication>> getPendingLeaves() {
+        List<LeaveApplication> pending = repository.findByStatus("PENDING");
+        return ResponseEntity.ok(pending);
+    }
+
+    // ============================
+    // 🆕 GET BY STATUS (ADMIN - generic)
+    // /api/leave/status/APPROVED, /PENDING, /REJECTED...
+    // ============================
+    @GetMapping("/status/{status}")
+    public ResponseEntity<List<LeaveApplication>> getLeavesByStatus(@PathVariable String status) {
+        List<LeaveApplication> list = repository.findByStatus(status.toUpperCase());
+        return ResponseEntity.ok(list);
+    }
+
+    // ============================
     // SUBMIT NEW LEAVE APPLICATION
     // ============================
     @PostMapping("/submit")
@@ -49,6 +66,7 @@ public class LeaveApplicationController {
         try {
             LocalDate start = DateUtil.fromFrontend(dto.getStartDate()); // expects "yyyy-MM-dd"
             LocalDate end   = DateUtil.fromFrontend(dto.getEndDate());
+
             // -------------------------------
             // Overlap Check
             // -------------------------------
@@ -78,6 +96,9 @@ public class LeaveApplicationController {
             LeaveApplication leave = new LeaveApplication();
             leave.updateFromDTO(dto, String.join(";", savedFiles));
 
+            // 🆕 ensure status is PENDING for new applications
+            leave.setStatus("PENDING");
+
             repository.save(leave);
 
             return ResponseEntity.ok("Leave application submitted successfully!");
@@ -105,7 +126,6 @@ public class LeaveApplicationController {
                 .body("No leave application found for token: " + ApplnNo);
     }
 
-
     // ===============================
     // UPDATE EXISTING LEAVE
     // ===============================
@@ -120,6 +140,7 @@ public class LeaveApplicationController {
             
             LocalDate start = DateUtil.fromFrontend(dto.getStartDate());
             LocalDate end   = DateUtil.fromFrontend(dto.getEndDate());
+
             // -------------------------------
             // Overlap check for other leaves
             // -------------------------------
@@ -162,9 +183,13 @@ public class LeaveApplicationController {
             String finalFileNames = fileStorageService.mergeFileNames(retained, newFiles);
 
             // -------------------------------
-            // Update entity
+            // Update entity (but not status)
             // -------------------------------
             existing.updateFromDTO(dto, finalFileNames);
+
+            // 🟡 Optional rule:
+            // If you want edited applications to go back to PENDING:
+            // existing.setStatus("PENDING");
 
             repository.save(existing);
 
@@ -175,5 +200,32 @@ public class LeaveApplicationController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Update failed: " + ex.getMessage());
         }
+    }
+
+    // ===============================
+    // 🆕 UPDATE STATUS (ADMIN)
+    // e.g. PUT /api/leave/status/LA-2025-001
+    // body: { "status": "APPROVED" }
+    // ===============================
+    @PutMapping("/status/{ApplnNo}")
+    public ResponseEntity<?> updateStatus(
+            @PathVariable String ApplnNo,
+            @RequestBody Map<String, String> body
+    ) {
+        String statusStr = body.get("status");
+        if (statusStr == null || statusStr.isBlank()) {
+            return ResponseEntity.badRequest().body("Missing 'status' in request body");
+        }
+
+        // Normalize to uppercase for consistency in DB
+        String normalizedStatus = statusStr.toUpperCase();
+
+        LeaveApplication existing = repository.findByApplnNo(ApplnNo)
+                .orElseThrow(() -> new RuntimeException("No application found with token: " + ApplnNo));
+
+        existing.setStatus(normalizedStatus);
+        repository.save(existing);
+
+        return ResponseEntity.ok("Status updated to " + normalizedStatus);
     }
 }

@@ -25,4 +25,7 @@ public interface LeaveApplicationRepository extends JpaRepository<LeaveApplicati
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate
     );
+    
+    // 🆕 For administrator Requests page: pending/approved/etc.
+    List<LeaveApplication> findByStatus(String status);
 }

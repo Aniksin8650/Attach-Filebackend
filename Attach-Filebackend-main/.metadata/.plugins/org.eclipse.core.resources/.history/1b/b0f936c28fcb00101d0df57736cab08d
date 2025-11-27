@@ -1,0 +1,5 @@
+package com.example.attachfile.entity;
+
+public enum LeaveStatus {
+
+}

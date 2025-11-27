@@ -1,0 +1,8 @@
+package com.example.attachfile.entity;
+
+public enum LeaveStatus {
+    PENDING,
+    APPROVED,
+    REJECTED,
+    ON_HOLD
+}

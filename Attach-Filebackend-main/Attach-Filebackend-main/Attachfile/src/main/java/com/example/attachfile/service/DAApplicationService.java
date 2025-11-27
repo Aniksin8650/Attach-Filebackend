@@ -11,9 +11,14 @@ public interface DAApplicationService {
 
     List<DAApplication> getAll();
 
-    Optional<DAApplication> getByApplnNo(String ApplnNo);
+    Optional<DAApplication> getByApplnNo(String applnNo);
 
     DAApplication submit(DADTO dto) throws IOException;
 
-    DAApplication update(String token, DADTO dto) throws IOException;
+    DAApplication update(String applnNo, DADTO dto) throws IOException;
+
+    // 🆕 for Admin Requests
+    List<DAApplication> getByStatus(String status);
+
+    DAApplication updateStatus(String applnNo, String status);
 }
