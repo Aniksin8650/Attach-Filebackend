@@ -1,17 +1,21 @@
 package com.example.attachfile.controller;
 
+import com.example.attachfile.dto.LeaveDTO;
 import com.example.attachfile.entity.LeaveApplication;
 import com.example.attachfile.repository.LeaveApplicationRepository;
-import org.springframework.beans.factory.annotation.Value;
+import com.example.attachfile.service.FileStorageService;
+import com.example.attachfile.util.DateUtil;
+
+//import jakarta.persistence.Table;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
+//import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.util.*;
 
 @RestController
@@ -19,218 +23,152 @@ import java.util.*;
 public class LeaveApplicationController {
 
     private final LeaveApplicationRepository repository;
+    private final FileStorageService fileStorageService;
 
-    @Value("${uploads.base-dir}")
-    private String baseUploadDir;
-
-    public LeaveApplicationController(LeaveApplicationRepository repository) {
+    public LeaveApplicationController(
+            LeaveApplicationRepository repository,
+            FileStorageService fileStorageService
+    ) {
         this.repository = repository;
+        this.fileStorageService = fileStorageService;
     }
 
-    // ✅ New end point to fetch all leave applications
+    // ============================
+    // GET ALL LEAVE RECORDS
+    // ============================
     @GetMapping("/all")
     public List<LeaveApplication> getAllLeaves() {
         return repository.findAll();
     }
-    
-    // ==================== SUBMIT NEW APPLICATION ====================
+
+    // ============================
+    // SUBMIT NEW LEAVE APPLICATION
+    // ============================
     @PostMapping("/submit")
-    public ResponseEntity<?> submitLeaveApplication(
-            @RequestParam("empId") String empId,
-            @RequestParam("name") String name,
-            @RequestParam("department") String department,
-            @RequestParam("designation") String designation,
-            @RequestParam("reason") String reason,
-            @RequestParam("startDate") String startDate,
-            @RequestParam("endDate") String endDate,
-            @RequestParam("token") String token,
-            @RequestParam(value = "contact", required = false) String contact,
-            @RequestParam("applicationType") String applicationType,
-            @RequestParam(value = "files", required = false) MultipartFile[] files
-    ) {
+    public ResponseEntity<?> submitLeave(@ModelAttribute LeaveDTO dto) {
         try {
-            if (applicationType == null || applicationType.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body("applicationType is required");
-            }
-            String typeFolder = applicationType.trim().toLowerCase();
+            LocalDate start = DateUtil.fromFrontend(dto.getStartDate()); // expects "yyyy-MM-dd"
+            LocalDate end   = DateUtil.fromFrontend(dto.getEndDate());
+            // -------------------------------
+            // Overlap Check
+            // -------------------------------
+            List<LeaveApplication> overlaps =
+                    repository.findOverlappingLeaves(dto.getEmpId(), start , end);
 
-            // ✅ Check for overlapping leaves
-            List<LeaveApplication> overlappingLeaves =
-                    repository.findOverlappingLeaves(empId, startDate, endDate);
-            if (!overlappingLeaves.isEmpty()) {
-                LeaveApplication existing = overlappingLeaves.get(0);
+            if (!overlaps.isEmpty()) {
+                LeaveApplication existing = overlaps.get(0);
                 return ResponseEntity.status(HttpStatus.CONFLICT)
-                        .body("Leave dates overlap with an existing application from "
-                                + existing.getStartDate() + " to " + existing.getEndDate() + ".");
+                        .body("Leave dates overlap with an existing leave from "
+                                + existing.getStartDate() + " to " + existing.getEndDate());
             }
 
-            // ✅ Prepare directories
-            File targetBase = new File(baseUploadDir);
-            if (!targetBase.exists() && !targetBase.mkdirs()) {
-                targetBase = new File("uploads");
-                if (!targetBase.exists()) targetBase.mkdirs();
-            }
+            // -------------------------------
+            // Create Directory
+            // -------------------------------
+            File empDir = fileStorageService.getEmpDirectory(dto.getApplicationType(), dto.getEmpId());
 
-            File typeDir = new File(targetBase, typeFolder);
-            if (!typeDir.exists()) typeDir.mkdirs();
+            // -------------------------------
+            // Save new files
+            // -------------------------------
+            List<String> savedFiles = fileStorageService.saveNewFiles(dto.getFiles(), empDir);
 
-            File empDir = new File(typeDir, empId);
-            if (!empDir.exists()) empDir.mkdirs();
-
-            SimpleDateFormat sdf = new SimpleDateFormat("HHmmssddMMyyyy");
-            List<String> savedFileNamesList = new ArrayList<>();
-
-            if (files != null) {
-                for (MultipartFile file : files) {
-                    if (file == null || file.isEmpty()) continue;
-
-                    String original = StringUtils.cleanPath(Objects.requireNonNull(file.getOriginalFilename()))
-                            .replaceAll("\\s+", "_")
-                            .replaceAll("[^A-Za-z0-9._-]", "");
-
-                    String timestamp = sdf.format(new Date());
-                    String finalName = timestamp + "_" + original;
-                    File dest = new File(empDir, finalName);
-                    file.transferTo(dest);
-                    savedFileNamesList.add(finalName);
-                }
-            }
-
+            // -------------------------------
+            // Create Entity from DTO
+            // -------------------------------
             LeaveApplication leave = new LeaveApplication();
-            leave.setEmpId(empId);
-            leave.setName(name);
-            leave.setDepartment(department);
-            leave.setDesignation(designation);
-            leave.setReason(reason);
-            leave.setStartDate(startDate);
-            leave.setEndDate(endDate);
-            leave.setContact(contact);
-            leave.setApplicationType(typeFolder);
-            leave.setFileName(String.join(";", savedFileNamesList));
-            leave.setToken(token);
+            leave.updateFromDTO(dto, String.join(";", savedFiles));
 
             repository.save(leave);
-            return ResponseEntity.ok("Leave application submitted successfully");
 
-        } catch (IOException ioEx) {
-            ioEx.printStackTrace();
+            return ResponseEntity.ok("Leave application submitted successfully!");
+
+        } catch (IOException e) {
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("File save error: " + ioEx.getMessage());
-        } catch (Exception ex) {
-            ex.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Server error: " + ex.getMessage());
+                    .body("File save failed: " + e.getMessage());
         }
     }
 
-    // ==================== GET APPLICATION BY TOKEN ====================
-    @GetMapping("/token/{token}")
-    public ResponseEntity<?> getApplicationByToken(@PathVariable String token) {
-        Optional<LeaveApplication> leaveOpt = repository.findByToken(token);
-        if (leaveOpt.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Application not found");
+    // ===============================
+    // GET BY TOKEN
+    // ===============================
+    @GetMapping("/ApplnNo/{ApplnNo}")
+    public ResponseEntity<?> getLeaveByToken(@PathVariable String ApplnNo) {
+
+        Optional<LeaveApplication> leaveOpt = repository.findByApplnNo(ApplnNo);
+
+        if (leaveOpt.isPresent()) {
+            return ResponseEntity.ok(leaveOpt.get());
         }
-        return ResponseEntity.ok(leaveOpt.get());
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body("No leave application found for token: " + ApplnNo);
     }
 
-    // ==================== UPDATE EXISTING APPLICATION ====================
-    @PutMapping("/update/{token}")
-    public ResponseEntity<?> updateLeaveApplicationByToken(
-            @PathVariable String token,
-            @RequestParam("empId") String empId,
-            @RequestParam("name") String name,
-            @RequestParam("department") String department,
-            @RequestParam("designation") String designation,
-            @RequestParam("reason") String reason,
-            @RequestParam("startDate") String startDate,
-            @RequestParam("endDate") String endDate,
-            @RequestParam(value = "contact", required = false) String contact,
-            @RequestParam("applicationType") String applicationType,
-            @RequestParam(value = "files", required = false) MultipartFile[] files,
-            @RequestParam(value = "retainedFiles", required = false) String retainedFiles
+
+    // ===============================
+    // UPDATE EXISTING LEAVE
+    // ===============================
+    @PutMapping("/update/{ApplnNo}")
+    public ResponseEntity<?> updateLeave(
+            @PathVariable String ApplnNo,
+            @ModelAttribute LeaveDTO dto
     ) {
         try {
-            LeaveApplication existing = repository.findByToken(token)
-                    .orElseThrow(() -> new RuntimeException("Application not found with token: " + token));
+            LeaveApplication existing = repository.findByApplnNo(ApplnNo)
+                    .orElseThrow(() -> new RuntimeException("No application found with token: " + ApplnNo));
+            
+            LocalDate start = DateUtil.fromFrontend(dto.getStartDate());
+            LocalDate end   = DateUtil.fromFrontend(dto.getEndDate());
+            // -------------------------------
+            // Overlap check for other leaves
+            // -------------------------------
+            List<LeaveApplication> overlaps =
+                    repository.findOverlappingLeaves(dto.getEmpId(), start, end)
+                            .stream()
+                            .filter(l -> !l.getApplnNo().equals(ApplnNo))
+                            .toList();
 
-            // ✅ Overlap validation
-            List<LeaveApplication> overlappingLeaves = repository
-                    .findOverlappingLeaves(empId, startDate, endDate)
-                    .stream()
-                    .filter(l -> !l.getToken().equals(token))
-                    .toList();
-            if (!overlappingLeaves.isEmpty()) {
-                LeaveApplication conflict = overlappingLeaves.get(0);
+            if (!overlaps.isEmpty()) {
+                LeaveApplication conflict = overlaps.get(0);
                 return ResponseEntity.status(HttpStatus.CONFLICT)
                         .body("Updated dates overlap with an existing leave from "
-                                + conflict.getStartDate() + " to " + conflict.getEndDate() + ".");
+                                + conflict.getStartDate() + " to " + conflict.getEndDate());
             }
 
-            // ✅ Update basic fields
-            existing.setEmpId(empId);
-            existing.setName(name);
-            existing.setDepartment(department);
-            existing.setDesignation(designation);
-            existing.setReason(reason);
-            existing.setStartDate(startDate);
-            existing.setEndDate(endDate);
-            existing.setContact(contact);
-            existing.setApplicationType(applicationType);
+            // -------------------------------
+            // Prepare directory
+            // -------------------------------
+            File empDir = fileStorageService.getEmpDirectory(dto.getApplicationType(), dto.getEmpId());
 
-            // ✅ Prepare directories
-            File typeDir = new File(baseUploadDir, applicationType.toLowerCase());
-            if (!typeDir.exists()) typeDir.mkdirs();
-            File empDir = new File(typeDir, empId);
-            if (!empDir.exists()) empDir.mkdirs();
+            // -------------------------------
+            // Parse retained file names
+            // -------------------------------
+            Set<String> retained = fileStorageService.parseRetainedFiles(dto.getRetainedFiles());
 
-         // ✅ Files retained by user (from frontend)
-            Set<String> existingFiles = new HashSet<>();
-            if (retainedFiles != null && !retainedFiles.isBlank()) {
-                existingFiles.addAll(Arrays.asList(retainedFiles.split(";")));
-            }
+            // -------------------------------
+            // Save NEW files only
+            // -------------------------------
+            List<String> newFiles = fileStorageService.saveNewFiles(dto.getFiles(), empDir);
 
-            // ✅ Handle new file uploads (skip duplicates)
-            List<String> newFiles = new ArrayList<>();
-            if (files != null && files.length > 0) {
-                SimpleDateFormat sdf = new SimpleDateFormat("HHmmssddMMyyyy");
-                for (MultipartFile file : files) {
-                    if (file == null || file.isEmpty()) continue;
+            // -------------------------------
+            // Delete removed files
+            // -------------------------------
+            fileStorageService.deleteRemovedFiles(retained, empDir);
 
-                    String original = StringUtils.cleanPath(Objects.requireNonNull(file.getOriginalFilename()))
-                            .replaceAll("\\s+", "_")
-                            .replaceAll("[^A-Za-z0-9._-]", "");
+            // -------------------------------
+            // Merge filenames
+            // -------------------------------
+            String finalFileNames = fileStorageService.mergeFileNames(retained, newFiles);
 
-                    boolean alreadyExists = existingFiles.stream().anyMatch(f -> f.endsWith(original));
-                    if (alreadyExists) continue;
+            // -------------------------------
+            // Update entity
+            // -------------------------------
+            existing.updateFromDTO(dto, finalFileNames);
 
-                    String timestamp = sdf.format(new Date());
-                    String finalName = timestamp + "_" + original;
-                    File dest = new File(empDir, finalName);
-                    file.transferTo(dest);
-//                    System.out.println("✅ Saved file to: " + dest.getAbsolutePath());
-                    newFiles.add(finalName);
-                }
-            }
-
-            // ✅ Merge existing and new files
-            existingFiles.addAll(newFiles);
-
-            // ✅ Delete files removed from frontend
-            File[] allFiles = empDir.listFiles();
-            if (allFiles != null) {
-                for (File f : allFiles) {
-                    boolean stillReferenced = existingFiles.stream()
-                            .anyMatch(saved -> f.getName().equals(saved));
-                    if (!stillReferenced) {
-                        f.delete(); // remove unused
-                    }
-                }
-            }
-
-            // ✅ Update DB and save
-            existing.setFileName(String.join(";", existingFiles));
             repository.save(existing);
-            return ResponseEntity.ok("Application updated successfully");
+
+            return ResponseEntity.ok("Leave application updated successfully!");
 
         } catch (Exception ex) {
             ex.printStackTrace();

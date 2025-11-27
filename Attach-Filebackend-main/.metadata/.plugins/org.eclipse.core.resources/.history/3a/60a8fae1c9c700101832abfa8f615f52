@@ -1,0 +1,5 @@
+package com.example.attachfile.config;
+
+public class PasswordConfig {
+
+}

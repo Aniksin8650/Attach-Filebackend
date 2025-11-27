@@ -1,0 +1,59 @@
+package com.example.attachfile.entity;
+
+import com.example.attachfile.dto.LTCDTO;
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
+@Entity
+@Table(name = "LTC_APPLICATIONS")
+@Getter
+@Setter
+public class LTCApplication {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String empId;
+    private String name;
+    private String department;
+    private String designation;
+
+    private String reason;
+    private String startDate;
+    private String endDate;
+    private String contact;
+
+    private String applicationType;  // "ltc"
+    private String token;
+
+    // LTC specific
+    private String travelDestination;
+    private String familyMembers;
+    private String claimYear;
+
+    @Column(length = 2000)
+    private String fileName;
+
+    public void updateFromDTO(LTCDTO dto, String finalFileNames) {
+        this.empId = dto.getEmpId();
+        this.name = dto.getName();
+        this.department = dto.getDepartment();
+        this.designation = dto.getDesignation();
+
+        this.reason = dto.getReason();
+        this.startDate = dto.getStartDate();
+        this.endDate = dto.getEndDate();
+        this.contact = dto.getContact();
+
+        this.applicationType = dto.getApplicationType().toLowerCase().trim();
+        this.token = dto.getToken();
+
+        this.travelDestination = dto.getTravelDestination();
+        this.familyMembers = dto.getFamilyMembers();
+        this.claimYear = dto.getClaimYear();
+
+        this.fileName = finalFileNames;
+    }
+}
