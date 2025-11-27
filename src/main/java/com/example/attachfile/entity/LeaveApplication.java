@@ -1,116 +1,66 @@
 package com.example.attachfile.entity;
 
+import com.example.attachfile.dto.LeaveDTO;
+import com.example.attachfile.util.DateUtil;
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.time.LocalDate;
 
 @Entity
-@Table(name = "leave_applications")
+@Table(name = "LEAVE_APPLICATIONS")
+@Getter @Setter
 public class LeaveApplication {
 
-    // ✅ Composite key: empId + startDate + endDate
-    @EmbeddedId
-    private LeaveApplicationId id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-    // Unique token to track/edit applications (e.g., APP-12345678)
-    @Column(unique = true)
-    private String token;
-
+    private String empId;
     private String name;
     private String department;
     private String designation;
+
     private String reason;
-    private String contact;
-    private String fileName;          // Semicolon-separated list of uploaded files
-    private String applicationType;   // e.g., "leave", "tada", "ltc"
 
-    // Default constructor
-    public LeaveApplication() {}
+    // ---- Converted from String → LocalDate ----
+    private LocalDate startDate;
+    private LocalDate endDate;
 
-    // ✅ Getters and Setters
-    public LeaveApplicationId getId() {
-        return id;
-    }
-    public void setId(LeaveApplicationId id) {
-        this.id = id;
-    }
+    // ---- Converted to NUMBER in Oracle ----
+    private Long contact;
 
-    public String getToken() {
-        return token;
-    }
-    public void setToken(String token) {
-        this.token = token;
-    }
+    private String applicationType;
+    private String applnNo;
 
-    public String getName() {
-        return name;
-    }
-    public void setName(String name) {
-        this.name = name;
-    }
+    @Column(length = 2000)
+    private String fileName;  // semicolon-separated saved file names
 
-    public String getDepartment() {
-        return department;
-    }
-    public void setDepartment(String department) {
-        this.department = department;
-    }
+    // ============================================
+    // Update entity fields from DTO
+    // ============================================
+    public void updateFromDTO(LeaveDTO dto, String finalFileNames) {
 
-    public String getDesignation() {
-        return designation;
-    }
-    public void setDesignation(String designation) {
-        this.designation = designation;
-    }
+        this.empId = dto.getEmpId();
+        this.name = dto.getName();
+        this.department = dto.getDepartment();
+        this.designation = dto.getDesignation();
 
-    public String getReason() {
-        return reason;
-    }
-    public void setReason(String reason) {
-        this.reason = reason;
-    }
+        this.reason = dto.getReason();
 
-    public String getContact() {
-        return contact;
-    }
-    public void setContact(String contact) {
-        this.contact = contact;
-    }
+        // ----- DATE conversion -----
+        this.startDate = DateUtil.fromFrontend(dto.getStartDate());
+        this.endDate = DateUtil.fromFrontend(dto.getEndDate());
 
-    public String getFileName() {
-        return fileName;
-    }
-    public void setFileName(String fileName) {
-        this.fileName = fileName;
-    }
+        // ----- CONTACT conversion -----
+        this.contact = dto.getContact() == null || dto.getContact().isBlank()
+                ? null
+                : Long.valueOf(dto.getContact());
 
-    public String getApplicationType() {
-        return applicationType;
-    }
-    public void setApplicationType(String applicationType) {
-        this.applicationType = applicationType;
-    }
+        this.applicationType = dto.getApplicationType().toLowerCase().trim();
+        this.applnNo = dto.getApplnNo();
 
-    // ✅ Convenience getters and setters for embedded ID fields
-    public String getEmpId() {
-        return id != null ? id.getEmpId() : null;
-    }
-    public void setEmpId(String empId) {
-        if (id == null) id = new LeaveApplicationId();
-        id.setEmpId(empId);
-    }
-
-    public String getStartDate() {
-        return id != null ? id.getStartDate() : null;
-    }
-    public void setStartDate(String startDate) {
-        if (id == null) id = new LeaveApplicationId();
-        id.setStartDate(startDate);
-    }
-
-    public String getEndDate() {
-        return id != null ? id.getEndDate() : null;
-    }
-    public void setEndDate(String endDate) {
-        if (id == null) id = new LeaveApplicationId();
-        id.setEndDate(endDate);
+        this.fileName = finalFileNames; // merged file names
     }
 }
