@@ -21,4 +21,6 @@ public interface DAApplicationService {
     List<DAApplication> getByStatus(String status);
 
     DAApplication updateStatus(String applnNo, String status);
+    
+    List<DAApplication> getByEmpId(String empId);
 }

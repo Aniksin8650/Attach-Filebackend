@@ -29,6 +29,10 @@ public class LTCApplicationServiceImpl implements LTCApplicationService {
     public List<LTCApplication> getAll() {
         return repository.findAll();
     }
+    @Override
+    public List<LTCApplication> getByEmpId(String empId) {
+        return repository.findByEmpId(empId);
+    }
 
     @Override
     public Optional<LTCApplication> getByApplnNo(String applnNo) {

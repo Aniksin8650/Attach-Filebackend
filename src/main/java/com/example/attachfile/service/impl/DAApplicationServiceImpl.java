@@ -89,6 +89,12 @@ public class DAApplicationServiceImpl implements DAApplicationService {
     }
 
     @Override
+    public List<DAApplication> getByEmpId(String empId) {
+        // ✅ use the injected repository instance, not the class
+        return repository.findByEmpId(empId);
+    }
+
+    @Override
     public DAApplication updateStatus(String applnNo, String status) {
         DAApplication existing = repository.findByApplnNo(applnNo)
                 .orElseThrow(() -> new RuntimeException("No DA application found with token: " + applnNo));

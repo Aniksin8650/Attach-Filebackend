@@ -1,6 +1,7 @@
 package com.example.attachfile.repository;
 
 import com.example.attachfile.entity.LeaveApplication;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -28,4 +29,13 @@ public interface LeaveApplicationRepository extends JpaRepository<LeaveApplicati
     
     // 🆕 For administrator Requests page: pending/approved/etc.
     List<LeaveApplication> findByStatus(String status);
+    
+    List<LeaveApplication> findByEmpId(String empId);
+    
+    List<LeaveApplication> findByEmpIdAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+            String empId,
+            LocalDate endDate,
+            LocalDate startDate
+    );
+
 }

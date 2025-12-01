@@ -21,4 +21,7 @@ public interface LTCApplicationService {
     List<LTCApplication> getByStatus(String status);
 
     LTCApplication updateStatus(String applnNo, String status);
+    
+    
+    List<LTCApplication> getByEmpId(String empId);
 }

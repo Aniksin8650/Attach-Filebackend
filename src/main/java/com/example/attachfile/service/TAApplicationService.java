@@ -19,5 +19,7 @@ public interface TAApplicationService {
     
     List<TAApplication> getByStatus(String status);
     TAApplication updateStatus(String applnNo, String status);
+    
+    List<TAApplication> getByEmpId(String empId);
 
 }

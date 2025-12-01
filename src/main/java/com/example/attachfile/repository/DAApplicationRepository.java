@@ -1,14 +1,27 @@
 package com.example.attachfile.repository;
-
-import com.example.attachfile.entity.DAApplication;
-import org.springframework.data.jpa.repository.JpaRepository;
-
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.example.attachfile.entity.DAApplication;
+
 public interface DAApplicationRepository extends JpaRepository<DAApplication, Long> {
-    Optional<DAApplication> findByApplnNo(String ApplnNo);
-    
+
+    Optional<DAApplication> findByApplnNo(String applnNo);
+
     List<DAApplication> findByStatus(String status);
+
+    List<DAApplication> findByEmpId(String empId);
+
+    // Overlapping applications for CREATE:
+    // existing.startDate <= newEndDate AND existing.endDate >= newStartDate
+    List<DAApplication> findByEmpIdAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+            String empId,
+            LocalDate endDate,
+            LocalDate startDate
+    );
+
 
 }

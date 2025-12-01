@@ -29,6 +29,10 @@ public class TAApplicationServiceImpl implements TAApplicationService {
     public List<TAApplication> getAll() {
         return repository.findAll();
     }
+    @Override
+    public List<TAApplication> getByEmpId(String empId) {
+        return repository.findByEmpId(empId);
+    }
 
     @Override
     public Optional<TAApplication> getByApplnNo(String ApplnNo) {

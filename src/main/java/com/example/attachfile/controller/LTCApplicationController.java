@@ -3,8 +3,12 @@ package com.example.attachfile.controller;
 import com.example.attachfile.dto.LTCDTO;
 import com.example.attachfile.entity.LTCApplication;
 import com.example.attachfile.service.LTCApplicationService;
+import com.example.attachfile.service.LTCValidationService;
+import com.example.attachfile.util.ValidationErrorUtil;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -16,9 +20,12 @@ import java.util.Map;
 public class LTCApplicationController {
 
     private final LTCApplicationService ltcService;
+    private final LTCValidationService ltcValidationService;
 
-    public LTCApplicationController(LTCApplicationService ltcService) {
+    public LTCApplicationController(LTCApplicationService ltcService,
+                                    LTCValidationService ltcValidationService) {
         this.ltcService = ltcService;
+        this.ltcValidationService = ltcValidationService;
     }
 
     @GetMapping("/all")
@@ -32,14 +39,35 @@ public class LTCApplicationController {
         return ResponseEntity.ok(pending);
     }
 
+    @GetMapping("/empId/{empId}")
+    public ResponseEntity<List<LTCApplication>> getLeaveByEmpId(@PathVariable String empId) {
+        List<LTCApplication> list = ltcService.getByEmpId(empId);
+        return ResponseEntity.ok(list);
+    }
+
     @GetMapping("/status/{status}")
     public ResponseEntity<List<LTCApplication>> getLtcByStatus(@PathVariable String status) {
         List<LTCApplication> list = ltcService.getByStatus(status.toUpperCase());
         return ResponseEntity.ok(list);
     }
 
+    // ===============================
+    // Submit new LTC (WITH validation)
+    // ===============================
     @PostMapping("/submit")
-    public ResponseEntity<?> submitLtc(@ModelAttribute LTCDTO dto) {
+    public ResponseEntity<?> submitLtc(
+            @Valid @ModelAttribute LTCDTO dto,
+            BindingResult bindingResult
+    ) {
+        // 1) Run backend/module-specific validation
+        ltcValidationService.validateForCreate(dto, bindingResult);
+
+        // 2) If errors → DO NOT call service, DO NOT save files
+        if (bindingResult.hasErrors()) {
+            return ValidationErrorUtil.buildErrorResponse(bindingResult, "Validation failed");
+        }
+
+        // 3) Only now save files + DB
         try {
             LTCApplication saved = ltcService.submit(dto);
             return ResponseEntity.ok("LTC application submitted successfully with token: " + saved.getApplnNo());
@@ -62,11 +90,24 @@ public class LTCApplicationController {
                         .body("No LTC application found for token: " + ApplnNo));
     }
 
+    // ===============================
+    // Update existing LTC (WITH validation)
+    // ===============================
     @PutMapping("/update/{ApplnNo}")
     public ResponseEntity<?> updateLtc(
             @PathVariable String ApplnNo,
-            @ModelAttribute LTCDTO dto
+            @Valid @ModelAttribute LTCDTO dto,
+            BindingResult bindingResult
     ) {
+        // 1) Run backend validation for update
+        ltcValidationService.validateForUpdate(ApplnNo, dto, bindingResult);
+
+        // 2) If errors → DO NOT touch files
+        if (bindingResult.hasErrors()) {
+            return ValidationErrorUtil.buildErrorResponse(bindingResult, "Validation failed");
+        }
+
+        // 3) Only now perform file operations + DB update
         try {
             LTCApplication updated = ltcService.update(ApplnNo, dto);
             return ResponseEntity.ok("LTC application updated successfully with token: " + updated.getApplnNo());

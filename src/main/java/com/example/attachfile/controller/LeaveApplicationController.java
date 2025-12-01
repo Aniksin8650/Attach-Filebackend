@@ -2,32 +2,33 @@ package com.example.attachfile.controller;
 
 import com.example.attachfile.dto.LeaveDTO;
 import com.example.attachfile.entity.LeaveApplication;
-import com.example.attachfile.repository.LeaveApplicationRepository;
-import com.example.attachfile.service.FileStorageService;
-import com.example.attachfile.util.DateUtil;
-
+import com.example.attachfile.service.LeaveApplicationService;
+import com.example.attachfile.service.LeaveValidationService;
+import com.example.attachfile.util.ValidationErrorUtil;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 
-import java.io.File;
+import jakarta.validation.Valid;
 import java.io.IOException;
-import java.time.LocalDate;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/leave")
 public class LeaveApplicationController {
 
-    private final LeaveApplicationRepository repository;
-    private final FileStorageService fileStorageService;
+    private final LeaveApplicationService leaveService;
+    private final LeaveValidationService leaveValidationService;
 
     public LeaveApplicationController(
-            LeaveApplicationRepository repository,
-            FileStorageService fileStorageService
+            LeaveApplicationService leaveService,
+            LeaveValidationService leaveValidationService
     ) {
-        this.repository = repository;
-        this.fileStorageService = fileStorageService;
+        this.leaveService = leaveService;
+        this.leaveValidationService = leaveValidationService;
     }
 
     // ============================
@@ -35,74 +36,50 @@ public class LeaveApplicationController {
     // ============================
     @GetMapping("/all")
     public List<LeaveApplication> getAllLeaves() {
-        return repository.findAll();
+        return leaveService.getAllLeaves();
+    }
+    
+    @GetMapping("/empId/{empId}")
+    public ResponseEntity<List<LeaveApplication>> getLeaveByEmpId(@PathVariable String empId) {
+        List<LeaveApplication> list = leaveService.getByEmpId(empId);
+        return ResponseEntity.ok(list);
     }
 
     // ============================
-    // 🆕 GET ALL PENDING LEAVES (ADMIN)
-    // /api/leave/pending
+    // GET ALL PENDING LEAVES (ADMIN)
     // ============================
     @GetMapping("/pending")
     public ResponseEntity<List<LeaveApplication>> getPendingLeaves() {
-        List<LeaveApplication> pending = repository.findByStatus("PENDING");
-        return ResponseEntity.ok(pending);
+        return ResponseEntity.ok(leaveService.getPendingLeaves());
     }
 
     // ============================
-    // 🆕 GET BY STATUS (ADMIN - generic)
-    // /api/leave/status/APPROVED, /PENDING, /REJECTED...
+    // GET BY STATUS (ADMIN)
     // ============================
     @GetMapping("/status/{status}")
     public ResponseEntity<List<LeaveApplication>> getLeavesByStatus(@PathVariable String status) {
-        List<LeaveApplication> list = repository.findByStatus(status.toUpperCase());
-        return ResponseEntity.ok(list);
+        return ResponseEntity.ok(leaveService.getLeavesByStatus(status));
     }
 
     // ============================
     // SUBMIT NEW LEAVE APPLICATION
     // ============================
     @PostMapping("/submit")
-    public ResponseEntity<?> submitLeave(@ModelAttribute LeaveDTO dto) {
+    public ResponseEntity<?> submitLeave(
+            @Valid @ModelAttribute LeaveDTO dto,
+            BindingResult bindingResult
+    ) {
+        // module-specific validation (dates, files, overlap)
+        leaveValidationService.validateForCreate(dto, bindingResult);
+
+        if (bindingResult.hasErrors()) {
+            return ValidationErrorUtil.buildErrorResponse(bindingResult, "Validation failed");
+        }
+
         try {
-            LocalDate start = DateUtil.fromFrontend(dto.getStartDate()); // expects "yyyy-MM-dd"
-            LocalDate end   = DateUtil.fromFrontend(dto.getEndDate());
-
-            // -------------------------------
-            // Overlap Check
-            // -------------------------------
-            List<LeaveApplication> overlaps =
-                    repository.findOverlappingLeaves(dto.getEmpId(), start , end);
-
-            if (!overlaps.isEmpty()) {
-                LeaveApplication existing = overlaps.get(0);
-                return ResponseEntity.status(HttpStatus.CONFLICT)
-                        .body("Leave dates overlap with an existing leave from "
-                                + existing.getStartDate() + " to " + existing.getEndDate());
-            }
-
-            // -------------------------------
-            // Create Directory
-            // -------------------------------
-            File empDir = fileStorageService.getEmpDirectory(dto.getApplicationType(), dto.getEmpId());
-
-            // -------------------------------
-            // Save new files
-            // -------------------------------
-            List<String> savedFiles = fileStorageService.saveNewFiles(dto.getFiles(), empDir);
-
-            // -------------------------------
-            // Create Entity from DTO
-            // -------------------------------
-            LeaveApplication leave = new LeaveApplication();
-            leave.updateFromDTO(dto, String.join(";", savedFiles));
-
-            // 🆕 ensure status is PENDING for new applications
-            leave.setStatus("PENDING");
-
-            repository.save(leave);
-
+            leaveService.createLeave(dto);
+            // Frontend later refetches by ApplnNo anyway
             return ResponseEntity.ok("Leave application submitted successfully!");
-
         } catch (IOException e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -115,13 +92,11 @@ public class LeaveApplicationController {
     // ===============================
     @GetMapping("/ApplnNo/{ApplnNo}")
     public ResponseEntity<?> getLeaveByToken(@PathVariable String ApplnNo) {
-
-        Optional<LeaveApplication> leaveOpt = repository.findByApplnNo(ApplnNo);
+        Optional<LeaveApplication> leaveOpt = leaveService.getByApplnNo(ApplnNo);
 
         if (leaveOpt.isPresent()) {
             return ResponseEntity.ok(leaveOpt.get());
         }
-
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body("No leave application found for token: " + ApplnNo);
     }
@@ -132,80 +107,30 @@ public class LeaveApplicationController {
     @PutMapping("/update/{ApplnNo}")
     public ResponseEntity<?> updateLeave(
             @PathVariable String ApplnNo,
-            @ModelAttribute LeaveDTO dto
+            @Valid @ModelAttribute LeaveDTO dto,
+            BindingResult bindingResult
     ) {
+        // module-specific validation (dates, files, overlap excluding this appln)
+        leaveValidationService.validateForUpdate(ApplnNo, dto, bindingResult);
+
+        if (bindingResult.hasErrors()) {
+            return ValidationErrorUtil.buildErrorResponse(bindingResult, "Validation failed");
+        }
+
         try {
-            LeaveApplication existing = repository.findByApplnNo(ApplnNo)
-                    .orElseThrow(() -> new RuntimeException("No application found with token: " + ApplnNo));
-            
-            LocalDate start = DateUtil.fromFrontend(dto.getStartDate());
-            LocalDate end   = DateUtil.fromFrontend(dto.getEndDate());
-
-            // -------------------------------
-            // Overlap check for other leaves
-            // -------------------------------
-            List<LeaveApplication> overlaps =
-                    repository.findOverlappingLeaves(dto.getEmpId(), start, end)
-                            .stream()
-                            .filter(l -> !l.getApplnNo().equals(ApplnNo))
-                            .toList();
-
-            if (!overlaps.isEmpty()) {
-                LeaveApplication conflict = overlaps.get(0);
-                return ResponseEntity.status(HttpStatus.CONFLICT)
-                        .body("Updated dates overlap with an existing leave from "
-                                + conflict.getStartDate() + " to " + conflict.getEndDate());
-            }
-
-            // -------------------------------
-            // Prepare directory
-            // -------------------------------
-            File empDir = fileStorageService.getEmpDirectory(dto.getApplicationType(), dto.getEmpId());
-
-            // -------------------------------
-            // Parse retained file names
-            // -------------------------------
-            Set<String> retained = fileStorageService.parseRetainedFiles(dto.getRetainedFiles());
-
-            // -------------------------------
-            // Save NEW files only
-            // -------------------------------
-            List<String> newFiles = fileStorageService.saveNewFiles(dto.getFiles(), empDir);
-
-            // -------------------------------
-            // Delete removed files
-            // -------------------------------
-            fileStorageService.deleteRemovedFiles(retained, empDir);
-
-            // -------------------------------
-            // Merge filenames
-            // -------------------------------
-            String finalFileNames = fileStorageService.mergeFileNames(retained, newFiles);
-
-            // -------------------------------
-            // Update entity (but not status)
-            // -------------------------------
-            existing.updateFromDTO(dto, finalFileNames);
-
-            // 🟡 Optional rule:
-            // If you want edited applications to go back to PENDING:
-            // existing.setStatus("PENDING");
-
-            repository.save(existing);
-
+            leaveService.updateLeave(ApplnNo, dto);
             return ResponseEntity.ok("Leave application updated successfully!");
-
-        } catch (Exception ex) {
-            ex.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Update failed: " + ex.getMessage());
+                    .body("Update failed: " + e.getMessage());
+        } catch (RuntimeException ex) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
         }
     }
 
     // ===============================
-    // 🆕 UPDATE STATUS (ADMIN)
-    // e.g. PUT /api/leave/status/LA-2025-001
-    // body: { "status": "APPROVED" }
+    // UPDATE STATUS (ADMIN)
     // ===============================
     @PutMapping("/status/{ApplnNo}")
     public ResponseEntity<?> updateStatus(
@@ -217,15 +142,11 @@ public class LeaveApplicationController {
             return ResponseEntity.badRequest().body("Missing 'status' in request body");
         }
 
-        // Normalize to uppercase for consistency in DB
-        String normalizedStatus = statusStr.toUpperCase();
-
-        LeaveApplication existing = repository.findByApplnNo(ApplnNo)
-                .orElseThrow(() -> new RuntimeException("No application found with token: " + ApplnNo));
-
-        existing.setStatus(normalizedStatus);
-        repository.save(existing);
-
-        return ResponseEntity.ok("Status updated to " + normalizedStatus);
+        try {
+            LeaveApplication updated = leaveService.updateStatus(ApplnNo, statusStr);
+            return ResponseEntity.ok("Status updated to " + updated.getStatus());
+        } catch (RuntimeException ex) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
+        }
     }
 }

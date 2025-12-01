@@ -3,8 +3,12 @@ package com.example.attachfile.controller;
 import com.example.attachfile.dto.DADTO;
 import com.example.attachfile.entity.DAApplication;
 import com.example.attachfile.service.DAApplicationService;
+import com.example.attachfile.service.DAValidationService;
+import com.example.attachfile.util.ValidationErrorUtil;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -16,9 +20,12 @@ import java.util.Map;
 public class DAApplicationController {
 
     private final DAApplicationService daService;
+    private final DAValidationService daValidationService;
 
-    public DAApplicationController(DAApplicationService daService) {
+    public DAApplicationController(DAApplicationService daService,
+                                   DAValidationService daValidationService) {
         this.daService = daService;
+        this.daValidationService = daValidationService;
     }
 
     // Get all DA applications
@@ -27,23 +34,43 @@ public class DAApplicationController {
         return daService.getAll();
     }
 
-    // 🆕 Get all PENDING DA applications
+    @GetMapping("/empId/{empId}")
+    public ResponseEntity<List<DAApplication>> getDaByEmpId(@PathVariable String empId) {
+        List<DAApplication> list = daService.getByEmpId(empId);
+        return ResponseEntity.ok(list);
+    }
+
+    // Get all PENDING DA applications
     @GetMapping("/pending")
     public ResponseEntity<List<DAApplication>> getPendingDa() {
         List<DAApplication> pending = daService.getByStatus("PENDING");
         return ResponseEntity.ok(pending);
     }
 
-    // 🆕 Get DA applications by status
+    // Get DA applications by status
     @GetMapping("/status/{status}")
     public ResponseEntity<List<DAApplication>> getDaByStatus(@PathVariable String status) {
         List<DAApplication> list = daService.getByStatus(status.toUpperCase());
         return ResponseEntity.ok(list);
     }
 
-    // Submit new DA
+    // ===========================
+    // Submit new DA (WITH validation)
+    // ===========================
     @PostMapping("/submit")
-    public ResponseEntity<?> submitDa(@ModelAttribute DADTO dto) {
+    public ResponseEntity<?> submitDa(
+            @Valid @ModelAttribute DADTO dto,
+            BindingResult bindingResult
+    ) {
+        // 1) Run backend validation first
+        daValidationService.validateForCreate(dto, bindingResult);
+
+        // 2) If errors → DO NOT save files, DO NOT call service
+        if (bindingResult.hasErrors()) {
+            return ValidationErrorUtil.buildErrorResponse(bindingResult, "Validation failed");
+        }
+
+        // 3) Only now save files + DB
         try {
             DAApplication saved = daService.submit(dto);
             return ResponseEntity.ok("DA application submitted successfully with token: " + saved.getApplnNo());
@@ -67,12 +94,24 @@ public class DAApplicationController {
                         .body("No DA application found for token: " + ApplnNo));
     }
 
-    // Update existing DA
+    // ===========================
+    // Update existing DA (WITH validation)
+    // ===========================
     @PutMapping("/update/{ApplnNo}")
     public ResponseEntity<?> updateDa(
             @PathVariable String ApplnNo,
-            @ModelAttribute DADTO dto
+            @Valid @ModelAttribute DADTO dto,
+            BindingResult bindingResult
     ) {
+        // 1) Run backend validation for update
+        daValidationService.validateForUpdate(ApplnNo, dto, bindingResult);
+
+        // 2) If errors → DO NOT touch files
+        if (bindingResult.hasErrors()) {
+            return ValidationErrorUtil.buildErrorResponse(bindingResult, "Validation failed");
+        }
+
+        // 3) Only now perform file operations + DB update
         try {
             DAApplication updated = daService.update(ApplnNo, dto);
             return ResponseEntity.ok("DA application updated successfully with token: " + updated.getApplnNo());
@@ -87,7 +126,7 @@ public class DAApplicationController {
         }
     }
 
-    // 🆕 Update status (Admin)
+    // Update status (Admin)
     @PutMapping("/status/{ApplnNo}")
     public ResponseEntity<?> updateDaStatus(
             @PathVariable String ApplnNo,

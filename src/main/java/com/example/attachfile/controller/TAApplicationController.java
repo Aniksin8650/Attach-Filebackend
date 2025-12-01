@@ -3,8 +3,12 @@ package com.example.attachfile.controller;
 import com.example.attachfile.dto.TADTO;
 import com.example.attachfile.entity.TAApplication;
 import com.example.attachfile.service.TAApplicationService;
+import com.example.attachfile.service.TAValidationService;
+import com.example.attachfile.util.ValidationErrorUtil;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -16,9 +20,12 @@ import java.util.Map;
 public class TAApplicationController {
 
     private final TAApplicationService taService;
+    private final TAValidationService taValidationService;
 
-    public TAApplicationController(TAApplicationService taService) {
+    public TAApplicationController(TAApplicationService taService,
+                                   TAValidationService taValidationService) {
         this.taService = taService;
+        this.taValidationService = taValidationService;
     }
 
     // ===============================
@@ -29,9 +36,14 @@ public class TAApplicationController {
         return taService.getAll();
     }
 
+    @GetMapping("/empId/{empId}")
+    public ResponseEntity<List<TAApplication>> getLeaveByEmpId(@PathVariable String empId) {
+        List<TAApplication> list = taService.getByEmpId(empId);
+        return ResponseEntity.ok(list);
+    }
+
     // ===============================
-    // 🆕 Get all PENDING TA applications (for Admin Requests)
-    // /api/ta/pending
+    // Get all PENDING TA applications (Admin)
     // ===============================
     @GetMapping("/pending")
     public ResponseEntity<List<TAApplication>> getPendingTa() {
@@ -40,8 +52,7 @@ public class TAApplicationController {
     }
 
     // ===============================
-    // 🆕 Get TA applications by status
-    // /api/ta/status/PENDING, /APPROVED, /REJECTED
+    // Get TA applications by status
     // ===============================
     @GetMapping("/status/{status}")
     public ResponseEntity<List<TAApplication>> getTaByStatus(@PathVariable String status) {
@@ -50,10 +61,22 @@ public class TAApplicationController {
     }
 
     // ===============================
-    // Submit new TA
+    // Submit new TA (WITH validation)
     // ===============================
     @PostMapping("/submit")
-    public ResponseEntity<?> submitTa(@ModelAttribute TADTO dto) {
+    public ResponseEntity<?> submitTa(
+            @Valid @ModelAttribute TADTO dto,
+            BindingResult bindingResult
+    ) {
+        // 1) Run backend/module-specific validation (if any)
+        taValidationService.validateForCreate(dto, bindingResult);
+
+        // 2) If any errors → DO NOT call service, DO NOT save files
+        if (bindingResult.hasErrors()) {
+            return ValidationErrorUtil.buildErrorResponse(bindingResult, "Validation failed");
+        }
+
+        // 3) Only now save files + DB record
         try {
             TAApplication saved = taService.submit(dto);
             return ResponseEntity.ok("TA application submitted successfully with token: " + saved.getApplnNo());
@@ -80,13 +103,23 @@ public class TAApplicationController {
     }
 
     // ===============================
-    // Update existing TA
+    // Update existing TA (WITH validation)
     // ===============================
     @PutMapping("/update/{ApplnNo}")
     public ResponseEntity<?> updateTa(
             @PathVariable String ApplnNo,
-            @ModelAttribute TADTO dto
+            @Valid @ModelAttribute TADTO dto,
+            BindingResult bindingResult
     ) {
+        // 1) Run backend validation for update
+        taValidationService.validateForUpdate(ApplnNo, dto, bindingResult);
+
+        // 2) If errors → DO NOT touch files
+        if (bindingResult.hasErrors()) {
+            return ValidationErrorUtil.buildErrorResponse(bindingResult, "Validation failed");
+        }
+
+        // 3) Only now perform file operations + DB update
         try {
             TAApplication updated = taService.update(ApplnNo, dto);
             return ResponseEntity.ok("TA application updated successfully with token: " + updated.getApplnNo());
@@ -102,9 +135,7 @@ public class TAApplicationController {
     }
 
     // ===============================
-    // 🆕 Update status (Admin Approve / Reject / On Hold)
-    // PUT /api/ta/status/{ApplnNo}
-    // body: { "status": "APPROVED" }
+    // Update status (Admin)
     // ===============================
     @PutMapping("/status/{ApplnNo}")
     public ResponseEntity<?> updateTaStatus(
