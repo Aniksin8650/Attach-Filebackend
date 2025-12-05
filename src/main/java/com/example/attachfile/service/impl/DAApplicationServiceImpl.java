@@ -51,8 +51,15 @@ public class DAApplicationServiceImpl implements DAApplicationService {
         // Default status for new DA application
         entity.setStatus("PENDING");
 
-        return repository.save(entity);
+        try {
+            return repository.save(entity);
+        } catch (RuntimeException ex) {
+            // DB/transaction failed → rollback newly saved files
+            fileStorageService.deleteFilesByNames(empDir, newFiles);
+            throw ex;
+        }
     }
+
 
     @Override
     public DAApplication update(String applnNo, DADTO dto) throws IOException {
@@ -63,25 +70,36 @@ public class DAApplicationServiceImpl implements DAApplicationService {
         // Prepare directory
         File empDir = fileStorageService.getEmpDirectory(dto.getApplicationType(), dto.getEmpId());
 
-        // Parse retained files
-        Set<String> retained = fileStorageService.parseRetainedFiles(dto.getRetainedFiles());
+        // 🔹 Files previously linked to THIS DA application
+        Set<String> previouslyLinked =
+                fileStorageService.parseRetainedFiles(existing.getFileName());
 
-        // Save new files
+        // 🔹 Files user decided to KEEP
+        Set<String> retained =
+                fileStorageService.parseRetainedFiles(dto.getRetainedFiles());
+
+        // 🔹 Save new files
         var newFiles = fileStorageService.saveNewFiles(dto.getFiles(), empDir);
 
-        // Delete removed ones
-        fileStorageService.deleteRemovedFiles(retained, empDir);
+        // 🔹 Delete only DA files of this appln that are not retained
+        fileStorageService.deleteRemovedFilesForApplication(previouslyLinked, retained, empDir);
 
-        // Merge final filenames
+        // 🔹 Merge final filenames
         String finalFileNames = fileStorageService.mergeFileNames(retained, newFiles);
 
         existing.updateFromDTO(dto, finalFileNames);
+        // Optional: existing.setStatus("PENDING");
 
-        // Optional: reset to pending on edit
-        // existing.setStatus("PENDING");
-
-        return repository.save(existing);
+        try {
+            return repository.save(existing);
+        } catch (RuntimeException ex) {
+            // DB/transaction failed → rollback newly uploaded files
+            fileStorageService.deleteFilesByNames(empDir, newFiles);
+            throw ex;
+        }
     }
+
+
 
     @Override
     public List<DAApplication> getByStatus(String status) {

@@ -65,7 +65,7 @@ public class LTCValidationServiceImpl implements LTCValidationService {
         if (bindingResult.hasErrors()) return;
 
         // ---------------------------
-        // 3) Overlap validation (same style as Leave / DA / TA)
+        // 3) Overlap validation (CREATE ONLY)
         // ---------------------------
         if (dto.getEmpId() != null && startDate != null && endDate != null) {
             List<LTCApplication> overlaps =
@@ -88,12 +88,49 @@ public class LTCValidationServiceImpl implements LTCValidationService {
     @Override
     public void validateForUpdate(String applnNo, LTCDTO dto, BindingResult bindingResult) {
 
-        // 1) Run create validations first (dates + overlap)
-        validateForCreate(dto, bindingResult);
+        // ---------------------------
+        // 1) Parse dates via DateUtil
+        // ---------------------------
+        LocalDate startDate = DateUtil.fromFrontend(dto.getStartDate());
+        LocalDate endDate   = DateUtil.fromFrontend(dto.getEndDate());
+
+        // If Bean Validation already added errors (@NotBlank etc.) stop early
+        if (bindingResult.hasErrors()) return;
+
+        // ---------------------------
+        // 2) Date relationship checks (NO overlap here)
+        // ---------------------------
+        if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
+            bindingResult.addError(new FieldError(
+                    "LTCDTO",
+                    "startDate",
+                    "Start date cannot be after end date"
+            ));
+        }
+
+        LocalDate today = LocalDate.now();
+
+        if (startDate != null && startDate.isBefore(today.minusYears(1))) {
+            bindingResult.addError(new FieldError(
+                    "LTCDTO",
+                    "startDate",
+                    "Start date is too far in the past"
+            ));
+        }
+
+        if (endDate != null && endDate.isAfter(today.plusYears(1))) {
+            bindingResult.addError(new FieldError(
+                    "LTCDTO",
+                    "endDate",
+                    "End date is too far in the future"
+            ));
+        }
 
         if (bindingResult.hasErrors()) return;
 
-        // 2) Ensure application exists
+        // ---------------------------
+        // 3) Ensure application exists (no overlap logic on update)
+        // ---------------------------
         LTCApplication existing = repository.findByApplnNo(applnNo).orElse(null);
         if (existing == null) {
             bindingResult.addError(new FieldError(
@@ -101,34 +138,10 @@ public class LTCValidationServiceImpl implements LTCValidationService {
                     "applnNo",
                     "No LTC application found with token: " + applnNo
             ));
-            return;
         }
 
-        // 3) Overlap check again, ignoring self
-        LocalDate startDate = DateUtil.fromFrontend(dto.getStartDate());
-        LocalDate endDate   = DateUtil.fromFrontend(dto.getEndDate());
-
-        if (startDate != null && endDate != null && dto.getEmpId() != null) {
-            List<LTCApplication> overlaps =
-                    repository.findByEmpIdAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
-                            dto.getEmpId(),
-                            endDate,
-                            startDate
-                    );
-
-            boolean hasOtherOverlap = overlaps.stream()
-                    .anyMatch(app -> !app.getApplnNo().equalsIgnoreCase(applnNo));
-
-            if (hasOtherOverlap) {
-                bindingResult.addError(new FieldError(
-                        "LTCDTO",
-                        "startDate",
-                        "Another LTC application exists in this date range for this employee"
-                ));
-            }
-        }
-
-        // Optional: lock edits based on status
+        // ✅ No overlap check on update
+        // Optional: status-based restrictions
         // if ("APPROVED".equalsIgnoreCase(existing.getStatus())) { ... }
     }
 }

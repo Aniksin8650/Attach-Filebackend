@@ -83,6 +83,18 @@ public class FileStorageService {
             }
         }
     }
+    
+ // Delete current files 
+    public void deleteFilesByNames(File empDir, List<String> fileNames) {
+        if (fileNames == null || fileNames.isEmpty()) return;
+
+        for (String name : fileNames) {
+            File f = new File(empDir, name);
+            if (f.exists()) {
+                f.delete(); // you can log if delete() returns false
+            }
+        }
+    }
 
     // ============================================================
     // Merge retained+new into a single fileName string
@@ -91,6 +103,30 @@ public class FileStorageService {
         retained.addAll(newFiles);
         return String.join(";", retained);
     }
+    
+    // ============================================================
+    // Delete only files that belonged to THIS application
+    // and are not retained anymore
+    // ============================================================
+    public void deleteRemovedFilesForApplication(Set<String> previouslyLinked,
+            Set<String> retained,
+            File empDir) {
+	if (previouslyLinked == null || previouslyLinked.isEmpty()) {
+	return; // nothing to delete
+	}
+	
+	Set<String> toDelete = new HashSet<>(previouslyLinked);
+	if (retained != null && !retained.isEmpty()) {
+	toDelete.removeAll(retained);
+	}
+	
+	for (String name : toDelete) {
+	File f = new File(empDir, name);
+	if (f.exists()) {
+	f.delete();
+	}
+	}
+	}
 
     // ============================================================
     // Convert retainedFiles string → Set

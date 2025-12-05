@@ -46,7 +46,6 @@ public class LeaveValidationServiceImpl implements LeaveValidationService {
 
         LocalDate today = LocalDate.now();
 
-        // Example limits: adjust as per your business rules
         if (startDate != null && startDate.isBefore(today.minusYears(1))) {
             bindingResult.addError(new FieldError(
                     "LeaveDTO",
@@ -66,7 +65,7 @@ public class LeaveValidationServiceImpl implements LeaveValidationService {
         if (bindingResult.hasErrors()) return;
 
         // ---------------------------
-        // 3) Overlap validation (no overlapping leave for same empId)
+        // 3) Overlap validation (CREATE ONLY)
         // ---------------------------
         if (dto.getEmpId() != null && startDate != null && endDate != null) {
             List<LeaveApplication> overlaps =
@@ -89,12 +88,12 @@ public class LeaveValidationServiceImpl implements LeaveValidationService {
     @Override
     public void validateForUpdate(String applnNo, LeaveDTO dto, BindingResult bindingResult) {
 
-        // 1) Run all create validations first
-        validateForCreate(dto, bindingResult);
+        // 0) If basic JSR-303 validations already failed, stop here
+        if (bindingResult.hasErrors()) {
+            return;
+        }
 
-        if (bindingResult.hasErrors()) return;
-
-        // 2) Ensure application exists
+        // 1) Ensure application exists
         LeaveApplication existing = repository.findByApplnNo(applnNo).orElse(null);
         if (existing == null) {
             bindingResult.addError(new FieldError(
@@ -105,31 +104,37 @@ public class LeaveValidationServiceImpl implements LeaveValidationService {
             return;
         }
 
-        // 3) Overlap check again but ignore self
+        // 2) Parse dates
         LocalDate startDate = DateUtil.fromFrontend(dto.getStartDate());
         LocalDate endDate   = DateUtil.fromFrontend(dto.getEndDate());
 
-        if (startDate != null && endDate != null && dto.getEmpId() != null) {
-            List<LeaveApplication> overlaps =
-                    repository.findByEmpIdAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
-                            dto.getEmpId(),
-                            endDate,
-                            startDate
-                    );
-
-            boolean hasOtherOverlap = overlaps.stream()
-                    .anyMatch(app -> !app.getApplnNo().equalsIgnoreCase(applnNo));
-
-            if (hasOtherOverlap) {
-                bindingResult.addError(new FieldError(
-                        "LeaveDTO",
-                        "startDate",
-                        "Another leave application exists in this date range for this employee"
-                ));
-            }
+        // 3) Date relationship checks (NO overlap here)
+        if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
+            bindingResult.addError(new FieldError(
+                    "LeaveDTO",
+                    "startDate",
+                    "Start date cannot be after end date"
+            ));
         }
 
-        // Optional: status-based restrictions
-        // if ("APPROVED".equalsIgnoreCase(existing.getStatus())) { ... }
+        LocalDate today = LocalDate.now();
+
+        if (startDate != null && startDate.isBefore(today.minusYears(1))) {
+            bindingResult.addError(new FieldError(
+                    "LeaveDTO",
+                    "startDate",
+                    "Start date is too far in the past"
+            ));
+        }
+
+        if (endDate != null && endDate.isAfter(today.plusYears(1))) {
+            bindingResult.addError(new FieldError(
+                    "LeaveDTO",
+                    "endDate",
+                    "End date is too far in the future"
+            ));
+        }
+
+        // 4) Intentionally no overlap validation on UPDATE
     }
 }

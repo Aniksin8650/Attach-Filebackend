@@ -52,8 +52,15 @@ public class LTCApplicationServiceImpl implements LTCApplicationService {
 
         entity.setStatus("PENDING");
 
-        return repository.save(entity);
+        try {
+            return repository.save(entity);
+        } catch (RuntimeException ex) {
+            // DB/transaction failed → rollback newly saved files
+            fileStorageService.deleteFilesByNames(empDir, newFiles);
+            throw ex;
+        }
     }
+
 
     @Override
     public LTCApplication update(String applnNo, LTCDTO dto) throws IOException {
@@ -63,20 +70,36 @@ public class LTCApplicationServiceImpl implements LTCApplicationService {
 
         File empDir = fileStorageService.getEmpDirectory(dto.getApplicationType(), dto.getEmpId());
 
-        Set<String> retained = fileStorageService.parseRetainedFiles(dto.getRetainedFiles());
+        // 🔹 Files previously linked to THIS LTC application (from DB)
+        Set<String> previouslyLinked =
+                fileStorageService.parseRetainedFiles(existing.getFileName());
 
+        // 🔹 Files user decided to KEEP this time (coming from frontend)
+        Set<String> retained =
+                fileStorageService.parseRetainedFiles(dto.getRetainedFiles());
+
+        // 🔹 Newly uploaded files
         var newFiles = fileStorageService.saveNewFiles(dto.getFiles(), empDir);
 
-        fileStorageService.deleteRemovedFiles(retained, empDir);
+        // 🔹 Delete only those old files of THIS application that are not retained
+        fileStorageService.deleteRemovedFilesForApplication(previouslyLinked, retained, empDir);
 
+        // 🔹 Final filenames = retained old + new
         String finalFileNames = fileStorageService.mergeFileNames(retained, newFiles);
 
         existing.updateFromDTO(dto, finalFileNames);
-
         // Optional: existing.setStatus("PENDING");
 
-        return repository.save(existing);
+        try {
+            return repository.save(existing);
+        } catch (RuntimeException ex) {
+            // DB/transaction failed → remove newly uploaded files
+            fileStorageService.deleteFilesByNames(empDir, newFiles);
+            throw ex;
+        }
     }
+
+
 
     @Override
     public List<LTCApplication> getByStatus(String status) {

@@ -84,7 +84,7 @@ public class TAValidationServiceImpl implements TAValidationService {
         if (bindingResult.hasErrors()) return;
 
         // ---------------------------
-        // 4) Overlap validation
+        // 4) Overlap validation (CREATE ONLY)
         // ---------------------------
         if (dto.getEmpId() != null && startDate != null && endDate != null) {
             List<TAApplication> overlaps =
@@ -107,11 +107,66 @@ public class TAValidationServiceImpl implements TAValidationService {
     @Override
     public void validateForUpdate(String applnNo, TADTO dto, BindingResult bindingResult) {
 
-        validateForCreate(dto, bindingResult);
+        // ---------------------------
+        // 1) Parse dates (same as create)
+        // ---------------------------
+        LocalDate startDate = DateUtil.fromFrontend(dto.getStartDate());
+        LocalDate endDate = DateUtil.fromFrontend(dto.getEndDate());
+        LocalDate travelDate = DateUtil.fromFrontend(dto.getTravelDate());
+
+        // If JSR-303 already put errors, stop
+        if (bindingResult.hasErrors()) return;
+
+        // ---------------------------
+        // 2) Date relationship checks (NO overlap)
+        // ---------------------------
+        if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
+            bindingResult.addError(new FieldError(
+                    "TADTO",
+                    "startDate",
+                    "Start date cannot be after end date"
+            ));
+        }
+
+        LocalDate today = LocalDate.now();
+
+        if (startDate != null && startDate.isBefore(today.minusYears(1))) {
+            bindingResult.addError(new FieldError(
+                    "TADTO",
+                    "startDate",
+                    "Start date is too far in the past"
+            ));
+        }
+
+        if (endDate != null && endDate.isAfter(today.plusYears(1))) {
+            bindingResult.addError(new FieldError(
+                    "TADTO",
+                    "endDate",
+                    "End date is too far in the future"
+            ));
+        }
+
+        if (travelDate != null && startDate != null && endDate != null) {
+            if (travelDate.isBefore(startDate) || travelDate.isAfter(endDate)) {
+                bindingResult.addError(new FieldError(
+                        "TADTO",
+                        "travelDate",
+                        "Travel date must be between start date and end date"
+                ));
+            }
+        }
+
+        // ---------------------------
+        // 3) Numeric validations
+        // ---------------------------
+        validatePositiveNumber(dto.getDistance(), "distance", bindingResult);
+        validatePositiveNumber(dto.getTaAmount(), "taAmount", bindingResult);
 
         if (bindingResult.hasErrors()) return;
 
-        // Validate application exists
+        // ---------------------------
+        // 4) Ensure application exists (no overlap logic here)
+        // ---------------------------
         TAApplication existing = repository.findByApplnNo(applnNo).orElse(null);
         if (existing == null) {
             bindingResult.addError(new FieldError(
@@ -119,32 +174,9 @@ public class TAValidationServiceImpl implements TAValidationService {
                     "applnNo",
                     "No TA application found with token: " + applnNo
             ));
-            return;
         }
 
-        LocalDate startDate = DateUtil.fromFrontend(dto.getStartDate());
-        LocalDate endDate = DateUtil.fromFrontend(dto.getEndDate());
-
-        if (bindingResult.hasErrors()) return;
-
-        // Overlap check, ignoring itself
-        List<TAApplication> overlaps =
-                repository.findByEmpIdAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
-                        dto.getEmpId(),
-                        endDate,
-                        startDate
-                );
-
-        boolean hasOtherOverlap = overlaps.stream()
-                .anyMatch(app -> !app.getApplnNo().equalsIgnoreCase(applnNo));
-
-        if (hasOtherOverlap) {
-            bindingResult.addError(new FieldError(
-                    "TADTO",
-                    "startDate",
-                    "Another TA application exists in this date range for this employee"
-            ));
-        }
+        // ✅ No overlap check on update
     }
 
     // -------------------------------------------

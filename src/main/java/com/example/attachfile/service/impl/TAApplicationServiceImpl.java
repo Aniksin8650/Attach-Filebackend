@@ -52,8 +52,16 @@ public class TAApplicationServiceImpl implements TAApplicationService {
         TAApplication entity = new TAApplication();
         entity.updateFromDTO(dto, finalFileNames);
 
-        return repository.save(entity);
+        try {
+            // Try DB save
+            return repository.save(entity);
+        } catch (RuntimeException ex) {
+            // If DB/save fails → delete just-saved files
+            fileStorageService.deleteFilesByNames(empDir, newFiles);
+            throw ex; // rethrow so controller can return 500
+        }
     }
+
 
     @Override
     public TAApplication update(String ApplnNo, TADTO dto) throws IOException {
@@ -64,22 +72,35 @@ public class TAApplicationServiceImpl implements TAApplicationService {
         // Prepare directory
         File empDir = fileStorageService.getEmpDirectory(dto.getApplicationType(), dto.getEmpId());
 
-        // Parse retained files
-        Set<String> retained = fileStorageService.parseRetainedFiles(dto.getRetainedFiles());
+        // 🔹 Files previously linked to THIS TA application
+        Set<String> previouslyLinked =
+                fileStorageService.parseRetainedFiles(existing.getFileName());
 
-        // Save new files
+        // 🔹 Files user decided to KEEP
+        Set<String> retained =
+                fileStorageService.parseRetainedFiles(dto.getRetainedFiles());
+
+        // 🔹 Save new files
         var newFiles = fileStorageService.saveNewFiles(dto.getFiles(), empDir);
 
-        // Delete removed ones
-        fileStorageService.deleteRemovedFiles(retained, empDir);
+        // 🔹 Delete only TA files of this appln that are not retained
+        fileStorageService.deleteRemovedFilesForApplication(previouslyLinked, retained, empDir);
 
-        // Merge final filenames
+        // 🔹 Merge final filenames
         String finalFileNames = fileStorageService.mergeFileNames(retained, newFiles);
 
         existing.updateFromDTO(dto, finalFileNames);
 
-        return repository.save(existing);
+        try {
+            return repository.save(existing);
+        } catch (RuntimeException ex) {
+            // Roll back only the *newly uploaded* files
+            fileStorageService.deleteFilesByNames(empDir, newFiles);
+            throw ex;
+        }
     }
+
+
     // 🆕 Get applications by status (PENDING / APPROVED / REJECTED / ON_HOLD...)
     @Override
     public List<TAApplication> getByStatus(String status) {

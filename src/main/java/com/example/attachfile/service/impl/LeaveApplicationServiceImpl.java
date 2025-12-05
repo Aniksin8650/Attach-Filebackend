@@ -54,10 +54,8 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
     @Override
     public LeaveApplication createLeave(LeaveDTO dto) throws IOException {
 
-        // Prepare directory
         File empDir = fileStorageService.getEmpDirectory(dto.getApplicationType(), dto.getEmpId());
 
-        // Save new files
         List<String> savedFiles = fileStorageService.saveNewFiles(dto.getFiles(), empDir);
         String finalFileNames = String.join(";", savedFiles);
 
@@ -65,10 +63,16 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
         leave.updateFromDTO(dto, finalFileNames);
         leave.setStatus("PENDING");
 
-        return repository.save(leave);
+        try {
+            // DB save
+            return repository.save(leave);
+        } catch (RuntimeException ex) {
+            // ❗ DB failed → clean up the just-saved files
+            fileStorageService.deleteFilesByNames(empDir, savedFiles);
+            throw ex; // rethrow so controller can return error
+        }
     }
-
-
+    
     @Override
     public LeaveApplication updateLeave(String applnNo, LeaveDTO dto) throws IOException {
 
@@ -77,21 +81,29 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
 
         File empDir = fileStorageService.getEmpDirectory(dto.getApplicationType(), dto.getEmpId());
 
-        Set<String> retained = fileStorageService.parseRetainedFiles(dto.getRetainedFiles());
+        Set<String> previouslyLinked =
+                fileStorageService.parseRetainedFiles(existing.getFileName());
+
+        Set<String> retained =
+                fileStorageService.parseRetainedFiles(dto.getRetainedFiles());
+
         List<String> newFiles = fileStorageService.saveNewFiles(dto.getFiles(), empDir);
 
-        fileStorageService.deleteRemovedFiles(retained, empDir);
+        // Only delete un-retained old files after we are confident about DB?
+        fileStorageService.deleteRemovedFilesForApplication(previouslyLinked, retained, empDir);
 
         String finalFileNames = fileStorageService.mergeFileNames(retained, newFiles);
-
         existing.updateFromDTO(dto, finalFileNames);
 
-        // Optional: when user edits → make status PENDING again
-        // existing.setStatus("PENDING");
-
-        return repository.save(existing);
+        try {
+            return repository.save(existing);
+        } catch (RuntimeException ex) {
+            // rollback newly uploaded files
+            fileStorageService.deleteFilesByNames(empDir, newFiles);
+            // (optional) you could also try to restore deleted old files, but that’s more complex)
+            throw ex;
+        }
     }
-
 
     @Override
     public LeaveApplication updateStatus(String applnNo, String status) {
