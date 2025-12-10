@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface LeaveApplicationRepository extends JpaRepository<LeaveApplication, Long> {
 
@@ -37,5 +38,10 @@ public interface LeaveApplicationRepository extends JpaRepository<LeaveApplicati
             LocalDate endDate,
             LocalDate startDate
     );
+    
+    long countByEmpIdAndStatus(String empId, String status);
+
+ // LeaveApplicationRepository.java
+//    long countByEmployeeIdAndStatusIn(String employeeId, Set<String> statuses);
 
 }

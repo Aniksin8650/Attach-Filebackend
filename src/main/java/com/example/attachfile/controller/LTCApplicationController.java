@@ -2,6 +2,7 @@ package com.example.attachfile.controller;
 
 import com.example.attachfile.dto.LTCDTO;
 import com.example.attachfile.entity.LTCApplication;
+import com.example.attachfile.repository.LTCApplicationRepository;
 import com.example.attachfile.service.LTCApplicationService;
 import com.example.attachfile.service.LTCValidationService;
 import com.example.attachfile.util.ValidationErrorUtil;
@@ -21,16 +22,24 @@ public class LTCApplicationController {
 
     private final LTCApplicationService ltcService;
     private final LTCValidationService ltcValidationService;
+	private final LTCApplicationRepository repository;
 
     public LTCApplicationController(LTCApplicationService ltcService,
-                                    LTCValidationService ltcValidationService) {
+                                    LTCValidationService ltcValidationService,
+                                    LTCApplicationRepository repository) {
         this.ltcService = ltcService;
         this.ltcValidationService = ltcValidationService;
+        this.repository = repository;
     }
 
     @GetMapping("/all")
     public List<LTCApplication> getAllLtc() {
         return ltcService.getAll();
+    }
+    
+    @GetMapping("/count/pending/{empId}")
+    public long getPendingLtc(@PathVariable String empId) {
+		return repository.countByEmpIdAndStatus(empId, "PENDING");
     }
 
     @GetMapping("/pending")

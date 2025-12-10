@@ -2,6 +2,7 @@ package com.example.attachfile.controller;
 
 import com.example.attachfile.dto.TADTO;
 import com.example.attachfile.entity.TAApplication;
+import com.example.attachfile.repository.TAApplicationRepository;
 import com.example.attachfile.service.TAApplicationService;
 import com.example.attachfile.service.TAValidationService;
 import com.example.attachfile.util.ValidationErrorUtil;
@@ -21,11 +22,14 @@ public class TAApplicationController {
 
     private final TAApplicationService taService;
     private final TAValidationService taValidationService;
+	private final TAApplicationRepository repository;
 
     public TAApplicationController(TAApplicationService taService,
-                                   TAValidationService taValidationService) {
+                                   TAValidationService taValidationService,
+                                   TAApplicationRepository repository) {
         this.taService = taService;
         this.taValidationService = taValidationService;
+        this.repository = repository;
     }
 
     // ===============================
@@ -34,6 +38,11 @@ public class TAApplicationController {
     @GetMapping("/all")
     public List<TAApplication> getAllTa() {
         return taService.getAll();
+    }
+    
+    @GetMapping("/count/pending/{empId}")
+    public long getPendingTa(@PathVariable String empId) {
+		return repository.countByEmpIdAndStatus(empId, "PENDING");
     }
 
     @GetMapping("/empId/{empId}")

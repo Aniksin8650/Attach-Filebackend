@@ -2,6 +2,7 @@ package com.example.attachfile.controller;
 
 import com.example.attachfile.dto.DADTO;
 import com.example.attachfile.entity.DAApplication;
+import com.example.attachfile.repository.DAApplicationRepository;
 import com.example.attachfile.service.DAApplicationService;
 import com.example.attachfile.service.DAValidationService;
 import com.example.attachfile.util.ValidationErrorUtil;
@@ -21,11 +22,14 @@ public class DAApplicationController {
 
     private final DAApplicationService daService;
     private final DAValidationService daValidationService;
+	private final DAApplicationRepository repository;
 
     public DAApplicationController(DAApplicationService daService,
-                                   DAValidationService daValidationService) {
+                                   DAValidationService daValidationService,
+                                   DAApplicationRepository repository) {
         this.daService = daService;
         this.daValidationService = daValidationService;
+        this.repository = repository;
     }
 
     // Get all DA applications
@@ -34,6 +38,11 @@ public class DAApplicationController {
         return daService.getAll();
     }
 
+    @GetMapping("/count/pending/{empId}")
+    public long getPendingDa(@PathVariable String empId) {
+		return repository.countByEmpIdAndStatus(empId, "PENDING");
+    }
+    
     @GetMapping("/empId/{empId}")
     public ResponseEntity<List<DAApplication>> getDaByEmpId(@PathVariable String empId) {
         List<DAApplication> list = daService.getByEmpId(empId);

@@ -2,6 +2,7 @@ package com.example.attachfile.repository;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -23,5 +24,9 @@ public interface DAApplicationRepository extends JpaRepository<DAApplication, Lo
             LocalDate startDate
     );
 
+    long countByEmpIdAndStatus(String empId, String status);
+
+ // DAApplicationRepository.java
+//    long countByEmployeeIdAndStatusIn(String employeeId, Set<String> statuses);
 
 }

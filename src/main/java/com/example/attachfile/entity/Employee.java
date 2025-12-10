@@ -7,13 +7,15 @@ import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 
 @Entity
-@Table(name = "EMPLOYEE")
-@Getter @Setter
+@Table(name = "V_DNETSNAPVIEW")
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 public class Employee {
 
     @Id
+    @Column(name = "F_CPERSNO", nullable = false, length = 6)
     private String empId;
 
     private String name;
@@ -24,9 +26,10 @@ public class Employee {
     private String phone;
     private String address;
 
-    private String joiningDate;  // If you want, we can convert to LocalDate later.
+    private String joiningDate;
     private String managerName;
 
     private String role;        // ADMIN / EMPLOYEE
-    private String password;    // Hashed password
+
+    // ❌ REMOVE the employeePassword field
 }

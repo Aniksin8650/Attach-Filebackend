@@ -2,6 +2,7 @@ package com.example.attachfile.controller;
 
 import com.example.attachfile.dto.LeaveDTO;
 import com.example.attachfile.entity.LeaveApplication;
+import com.example.attachfile.repository.LeaveApplicationRepository;
 import com.example.attachfile.service.LeaveApplicationService;
 import com.example.attachfile.service.LeaveValidationService;
 import com.example.attachfile.util.ValidationErrorUtil;
@@ -22,13 +23,16 @@ public class LeaveApplicationController {
 
     private final LeaveApplicationService leaveService;
     private final LeaveValidationService leaveValidationService;
+	private final LeaveApplicationRepository repository;
 
     public LeaveApplicationController(
             LeaveApplicationService leaveService,
-            LeaveValidationService leaveValidationService
+            LeaveValidationService leaveValidationService,
+            LeaveApplicationRepository repository
     ) {
         this.leaveService = leaveService;
         this.leaveValidationService = leaveValidationService;
+        this.repository = repository;
     }
 
     // ============================
@@ -43,6 +47,11 @@ public class LeaveApplicationController {
     public ResponseEntity<List<LeaveApplication>> getLeaveByEmpId(@PathVariable String empId) {
         List<LeaveApplication> list = leaveService.getByEmpId(empId);
         return ResponseEntity.ok(list);
+    }
+    
+    @GetMapping("/count/pending/{empId}")
+    public long getPendingLeave(@PathVariable String empId) {
+        return repository.countByEmpIdAndStatus(empId, "PENDING");
     }
 
     // ============================
