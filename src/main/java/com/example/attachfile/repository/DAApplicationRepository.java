@@ -27,6 +27,6 @@ public interface DAApplicationRepository extends JpaRepository<DAApplication, Lo
     long countByEmpIdAndStatus(String empId, String status);
 
  // DAApplicationRepository.java
-//    long countByEmployeeIdAndStatusIn(String employeeId, Set<String> statuses);
+    long countByEmpIdAndStatusIn(String empId, Set<String> statuses);
 
 }

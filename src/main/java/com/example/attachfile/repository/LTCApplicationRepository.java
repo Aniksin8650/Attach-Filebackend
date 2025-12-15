@@ -24,6 +24,6 @@ public interface LTCApplicationRepository extends JpaRepository<LTCApplication, 
 
     long countByEmpIdAndStatus(String empId, String status);
  // LTCApplicationRepository.java
-//    long countByEmployeeIdAndStatusIn(String employeeId, Set<String> statuses);
+    long countByEmpIdAndStatusIn(String empId, Set<String> statuses);
 
 }

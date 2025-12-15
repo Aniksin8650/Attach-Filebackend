@@ -42,6 +42,6 @@ public interface LeaveApplicationRepository extends JpaRepository<LeaveApplicati
     long countByEmpIdAndStatus(String empId, String status);
 
  // LeaveApplicationRepository.java
-//    long countByEmployeeIdAndStatusIn(String employeeId, Set<String> statuses);
+    long countByEmpIdAndStatusIn(String empId, Set<String> statuses);
 
 }

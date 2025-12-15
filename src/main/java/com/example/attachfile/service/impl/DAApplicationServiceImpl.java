@@ -2,6 +2,7 @@ package com.example.attachfile.service.impl;
 
 import com.example.attachfile.dto.DADTO;
 import com.example.attachfile.entity.DAApplication;
+import com.example.attachfile.exception.MaxPendingApplicationsException;
 import com.example.attachfile.repository.DAApplicationRepository;
 import com.example.attachfile.service.DAApplicationService;
 import com.example.attachfile.service.FileStorageService;
@@ -19,6 +20,10 @@ public class DAApplicationServiceImpl implements DAApplicationService {
     private final DAApplicationRepository repository;
     private final FileStorageService fileStorageService;
 
+    private static final int MAX_PENDING = 3;
+    private static final Set<String> PENDING_STATUSES =
+            Set.of("PENDING", "FORWARDED", "SUBMITTED");
+
     public DAApplicationServiceImpl(DAApplicationRepository repository,
                                     FileStorageService fileStorageService) {
         this.repository = repository;
@@ -35,71 +40,86 @@ public class DAApplicationServiceImpl implements DAApplicationService {
         return repository.findByApplnNo(applnNo);
     }
 
+    /**
+     * CREATE new DA application
+     * ❌ Block if MAX_PENDING reached
+     */
     @Override
     public DAApplication submit(DADTO dto) throws IOException {
 
-        // Prepare directory
-        File empDir = fileStorageService.getEmpDirectory(dto.getApplicationType(), dto.getEmpId());
+        // 🔒 1. Check pending limit BEFORE file operations
+        long pendingCount =
+                repository.countByEmpIdAndStatusIn(dto.getEmpId(), PENDING_STATUSES);
 
-        // Save new files
-        var newFiles = fileStorageService.saveNewFiles(dto.getFiles(), empDir);
+        if (pendingCount >= MAX_PENDING) {
+            throw new MaxPendingApplicationsException(
+                    "Maximum pending DA applications (" + MAX_PENDING + ") reached. " +
+                    "Please wait for existing requests to be processed."
+            );
+        }
+
+        // 📁 2. Prepare directory
+        File empDir =
+                fileStorageService.getEmpDirectory(dto.getApplicationType(), dto.getEmpId());
+
+        // 📎 3. Save new files
+        var newFiles =
+                fileStorageService.saveNewFiles(dto.getFiles(), empDir);
+
         String finalFileNames = String.join(";", newFiles);
 
         DAApplication entity = new DAApplication();
         entity.updateFromDTO(dto, finalFileNames);
-
-        // Default status for new DA application
         entity.setStatus("PENDING");
 
         try {
             return repository.save(entity);
         } catch (RuntimeException ex) {
-            // DB/transaction failed → rollback newly saved files
+            // ❗ Rollback uploaded files
             fileStorageService.deleteFilesByNames(empDir, newFiles);
             throw ex;
         }
     }
 
-
+    /**
+     * UPDATE existing DA application
+     * ✅ Always allowed
+     */
     @Override
     public DAApplication update(String applnNo, DADTO dto) throws IOException {
 
         DAApplication existing = repository.findByApplnNo(applnNo)
-                .orElseThrow(() -> new RuntimeException("No DA application found with token: " + applnNo));
+                .orElseThrow(() ->
+                        new RuntimeException("No DA application found with token: " + applnNo));
 
-        // Prepare directory
-        File empDir = fileStorageService.getEmpDirectory(dto.getApplicationType(), dto.getEmpId());
+        File empDir =
+                fileStorageService.getEmpDirectory(dto.getApplicationType(), dto.getEmpId());
 
-        // 🔹 Files previously linked to THIS DA application
         Set<String> previouslyLinked =
                 fileStorageService.parseRetainedFiles(existing.getFileName());
 
-        // 🔹 Files user decided to KEEP
         Set<String> retained =
                 fileStorageService.parseRetainedFiles(dto.getRetainedFiles());
 
-        // 🔹 Save new files
-        var newFiles = fileStorageService.saveNewFiles(dto.getFiles(), empDir);
+        var newFiles =
+                fileStorageService.saveNewFiles(dto.getFiles(), empDir);
 
-        // 🔹 Delete only DA files of this appln that are not retained
-        fileStorageService.deleteRemovedFilesForApplication(previouslyLinked, retained, empDir);
+        fileStorageService.deleteRemovedFilesForApplication(
+                previouslyLinked, retained, empDir
+        );
 
-        // 🔹 Merge final filenames
-        String finalFileNames = fileStorageService.mergeFileNames(retained, newFiles);
+        String finalFileNames =
+                fileStorageService.mergeFileNames(retained, newFiles);
 
         existing.updateFromDTO(dto, finalFileNames);
-        // Optional: existing.setStatus("PENDING");
 
         try {
             return repository.save(existing);
         } catch (RuntimeException ex) {
-            // DB/transaction failed → rollback newly uploaded files
             fileStorageService.deleteFilesByNames(empDir, newFiles);
             throw ex;
         }
     }
-
-
 
     @Override
     public List<DAApplication> getByStatus(String status) {
@@ -108,14 +128,14 @@ public class DAApplicationServiceImpl implements DAApplicationService {
 
     @Override
     public List<DAApplication> getByEmpId(String empId) {
-        // ✅ use the injected repository instance, not the class
         return repository.findByEmpId(empId);
     }
 
     @Override
     public DAApplication updateStatus(String applnNo, String status) {
         DAApplication existing = repository.findByApplnNo(applnNo)
-                .orElseThrow(() -> new RuntimeException("No DA application found with token: " + applnNo));
+                .orElseThrow(() ->
+                        new RuntimeException("No DA application found with token: " + applnNo));
 
         existing.setStatus(status.toUpperCase());
         return repository.save(existing);

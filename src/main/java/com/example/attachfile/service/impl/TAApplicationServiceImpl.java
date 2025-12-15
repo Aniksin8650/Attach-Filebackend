@@ -2,8 +2,10 @@ package com.example.attachfile.service.impl;
 
 import com.example.attachfile.dto.TADTO;
 import com.example.attachfile.entity.TAApplication;
+import com.example.attachfile.exception.MaxPendingApplicationsException;
 import com.example.attachfile.repository.TAApplicationRepository;
-import com.example.attachfile.service.*;
+import com.example.attachfile.service.FileStorageService;
+import com.example.attachfile.service.TAApplicationService;
 
 import org.springframework.stereotype.Service;
 
@@ -12,12 +14,17 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+//import java.util.Collection;
 
 @Service
 public class TAApplicationServiceImpl implements TAApplicationService {
 
     private final TAApplicationRepository repository;
     private final FileStorageService fileStorageService;
+
+    private static final int MAX_PENDING = 3;
+    // statuses that count as "pending" (adjust per your domain/status names)
+    private static final Set<String> PENDING_STATUSES = Set.of("PENDING", "FORWARDED", "SUBMITTED");
 
     public TAApplicationServiceImpl(TAApplicationRepository repository,
                                     FileStorageService fileStorageService) {
@@ -29,6 +36,7 @@ public class TAApplicationServiceImpl implements TAApplicationService {
     public List<TAApplication> getAll() {
         return repository.findAll();
     }
+
     @Override
     public List<TAApplication> getByEmpId(String empId) {
         return repository.findByEmpId(empId);
@@ -41,8 +49,18 @@ public class TAApplicationServiceImpl implements TAApplicationService {
 
     @Override
     public TAApplication submit(TADTO dto) throws IOException {
-    	
-        // Prepare directory
+
+        // ----- 1) Check pending limit BEFORE doing any file work -----
+        // Note: repository.countByEmpIdAndStatusIn(...) must exist in your repo
+        long pendingCount = repository.countByEmpIdAndStatusIn(dto.getEmpId(), PENDING_STATUSES);
+        if (pendingCount >= MAX_PENDING) {
+            throw new MaxPendingApplicationsException(
+                    "Maximum pending TA applications (" + MAX_PENDING + ") reached. " +
+                            "Please wait for existing requests to be processed."
+            );
+        }
+
+        // ----- 2) Prepare directory and save files -----
         File empDir = fileStorageService.getEmpDirectory(dto.getApplicationType(), dto.getEmpId());
 
         // Save new files
@@ -61,7 +79,6 @@ public class TAApplicationServiceImpl implements TAApplicationService {
             throw ex; // rethrow so controller can return 500
         }
     }
-
 
     @Override
     public TAApplication update(String ApplnNo, TADTO dto) throws IOException {
@@ -99,7 +116,6 @@ public class TAApplicationServiceImpl implements TAApplicationService {
             throw ex;
         }
     }
-
 
     // 🆕 Get applications by status (PENDING / APPROVED / REJECTED / ON_HOLD...)
     @Override
